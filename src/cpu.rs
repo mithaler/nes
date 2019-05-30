@@ -408,7 +408,13 @@ impl Cpu {
             },
             Indirect => {
                 let addr = join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1));
-                join_bytes(self.mem.get(addr + 1), self.mem.get(addr))
+                let high_byte_addr = if (addr & 0x00FF) == 0x00FF {
+                    // crazy 6502 bug!
+                    addr & 0xFF00
+                } else {
+                    addr + 1
+                };
+                join_bytes(self.mem.get(high_byte_addr), self.mem.get(addr))
             }
             IndirectX => {
                 let arg = self.mem.get(self.pc + 1).wrapping_add(self.x);
