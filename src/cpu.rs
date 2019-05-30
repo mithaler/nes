@@ -535,15 +535,17 @@ impl Cpu {
             STX => self.stx(op),
             STY => self.sty(op),
 
-            // "illegal"
-            DCP => self.dcp(op),
-            ISC => self.isc(op),
+            // "illegal", and do weird special things
             LAX => self.lax(op),
             SAX => self.sax(op),
-            SLO => self.slo(op),
-            SRE => self.sre(op),
-            RRA => self.rra(op),
-            RLA => self.rla(op),
+
+            // "illegal", and just do two regular things
+            DCP => self.illegal_op(op, |cpu, opc| {cpu.dec(opc); cpu.compare(opc, cpu.a);}),
+            ISC => self.illegal_op(op, |cpu, opc| {cpu.inc(opc); cpu.sbc(opc);}),
+            SLO => self.illegal_op(op, |cpu, opc| {cpu.asl(opc); cpu.ora(opc);}),
+            SRE => self.illegal_op(op, |cpu, opc| {cpu.lsr(opc); cpu.eor(opc);}),
+            RRA => self.illegal_op(op, |cpu, opc| {cpu.ror(opc); cpu.adc(opc);}),
+            RLA => self.illegal_op(op, |cpu, opc| {cpu.rol(opc); cpu.and(opc);}),
 
             // comparisons
             CMP => self.compare(op, self.a),
@@ -636,6 +638,11 @@ impl Cpu {
 
     // Opcodes!
 
+    fn illegal_op(&mut self, op: &Opcode, func: fn(&mut Cpu, &Opcode) -> ()) -> u16 {
+        func(self, op);
+        self._illegal_opcodes_pause_and_shift(op)
+    }
+
     fn adc(&mut self, op: &Opcode) -> u16 {
         let addr = self.resolve_addr(op);
         let value = self.mem.get(addr);
@@ -714,12 +721,6 @@ impl Cpu {
         self._group_1_pause_and_shift(op)
     }
 
-    fn dcp(&mut self, op: &Opcode) -> u16 {
-        self.dec(op);
-        self.compare(op, self.a);
-        self._illegal_opcodes_pause_and_shift(op)
-    }
-
     fn dec(&mut self, op: &Opcode) -> u16 {
         let addr = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, true);
@@ -774,12 +775,6 @@ impl Cpu {
         let (new_val, shift) = self.increment(self.y, op, false);
         self.y = new_val;
         shift
-    }
-
-    fn isc(&mut self, op: &Opcode) -> u16 {
-        self.inc(op);
-        self.sbc(op);
-        self._illegal_opcodes_pause_and_shift(op)
     }
 
     fn jmp(&mut self, op: &Opcode) -> u16 {
@@ -964,18 +959,6 @@ impl Cpu {
         }
     }
 
-    fn rra(&mut self, op: &Opcode) -> u16 {
-        self.ror(op);
-        self.adc(op);
-        self._illegal_opcodes_pause_and_shift(op)
-    }
-
-    fn rla(&mut self, op: &Opcode) -> u16 {
-        self.rol(op);
-        self.and(op);
-        self._illegal_opcodes_pause_and_shift(op)
-    }
-
     fn rti(&mut self, op: &Opcode) -> u16 {
         self.p = self.stack_pop();
         self.remaining_pause += 1;
@@ -1011,18 +994,6 @@ impl Cpu {
         self.set_value_flags(self.a);
         self.set_overflow(signed_sum < -128 || signed_sum > 127);
         self._group_1_pause_and_shift(op)
-    }
-
-    fn slo(&mut self, op: &Opcode) -> u16 {
-        self.asl(op);
-        self.ora(op);
-        self._illegal_opcodes_pause_and_shift(op)
-    }
-
-    fn sre(&mut self, op: &Opcode) -> u16 {
-        self.lsr(op);
-        self.eor(op);
-        self._illegal_opcodes_pause_and_shift(op)
     }
 
     fn store(&mut self, op: &Opcode, value: u8) -> u16 {
