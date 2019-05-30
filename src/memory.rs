@@ -95,7 +95,7 @@ mod tests {
 
         #[test]
         fn can_read_rom() {
-            let mut cpu = CpuMem::new(Box::new(vec![1, 2, 3]));
+            let cpu = CpuMem::new(Box::new(vec![1, 2, 3]));
             assert_eq!(cpu.get(0xC000), 1);
             assert_eq!(cpu.get(0xC001), 2);
             assert_eq!(cpu.get(0xC002), 3);

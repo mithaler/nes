@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let rom: Mem = Box::new(fs::read(&args[1])?);
 
-    let (prg_rom, chr_rom) = rom_sections(rom);
+    let (prg_rom, _chr_rom) = rom_sections(rom);
 
     let mut cpu = Cpu::new(prg_rom);
     // TODO figure out pausing

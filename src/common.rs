@@ -19,6 +19,8 @@ pub fn join_bytes(high: u8, low: u8) -> u16 {
 }
 
 mod tests {
+    use super::*;
+
     #[test]
     fn it_joins_bytes() {
         assert_eq!(join_bytes(0xfc, 0xb3), 0xfcb3);
