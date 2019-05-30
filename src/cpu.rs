@@ -563,14 +563,13 @@ impl Cpu {
             BPL => self.branch(op, !self.negative()),
 
             // simple flag settings
-            // TODO handle cycle length for these (they're all 2)
-            SEC => { self.set_carry(true); 1} ,
-            SED => { self.set_decimal(true); 1},
-            SEI => { self.set_interrupt_disable(true); 1},
-            CLC => { self.set_carry(false); 1},
-            CLD => { self.set_decimal(false); 1},
-            CLI => { self.set_interrupt_disable(false); 1},
-            CLV => { self.set_overflow(false); 1},
+            SEC => self.flag_op(|cpu| cpu.set_carry(true)),
+            SED => self.flag_op(|cpu| cpu.set_decimal(true)),
+            SEI => self.flag_op(|cpu| cpu.set_interrupt_disable(true)),
+            CLC => self.flag_op(|cpu| cpu.set_carry(false)),
+            CLD => self.flag_op(|cpu| cpu.set_decimal(false)),
+            CLI => self.flag_op(|cpu| cpu.set_interrupt_disable(false)),
+            CLV => self.flag_op(|cpu| cpu.set_overflow(false)),
 
             // transfers
             TAX => self.transfer_op(|cpu| { cpu.x = cpu.a; (cpu.x, true) }),
@@ -637,6 +636,12 @@ impl Cpu {
     }
 
     // Opcodes!
+
+    fn flag_op(&mut self, func: fn(&mut Cpu) -> ()) -> u16 {
+        func(self);
+        self.remaining_pause = 2;
+        1
+    }
 
     fn illegal_op(&mut self, op: &Opcode, func: fn(&mut Cpu, &Opcode) -> ()) -> u16 {
         func(self, op);
