@@ -35,6 +35,22 @@ mod opcodes {
         IndirectY
     }
 
+    impl AddressMode {
+        pub fn byte_count(&self) -> u16 {
+            match self {
+                // no arg
+                Accumulator | Implicit => 1,
+
+                // 1 byte arg
+                ZeroPage | ZeroPageX | ZeroPageY | Relative => 2,
+                Immediate | Indirect | IndirectX | IndirectY => 2,
+
+                // 2 byte arg
+                Absolute | AbsoluteX | AbsoluteY => 3,
+            }
+        }
+    }
+
     use Operation::*;
     use AddressMode::*;
 
@@ -386,6 +402,19 @@ impl Cpu {
         }
     }
 
+    fn absolute_addr(&self) -> u16 {
+        join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1))
+    }
+
+    fn next_byte(&self) -> u8 {
+        self.mem.get(self.pc + 1)
+    }
+
+    /// Returns whether the addresses are on different 256-bit pages.
+    fn different_pages(addr1: u16, addr2: u16) -> bool {
+        (addr1 & 0xFF00) != (addr2 & 0xFF00)
+    }
+
     /// Returns the address in memory that the opcode points to, based on the current
     /// position of `PC` and the opcode's address mode. Panics if the opcode's address mode is
     /// `ACCUMULATOR` or `IMPLICIT`, because in both cases the handler needs to do something
@@ -395,17 +424,13 @@ impl Cpu {
             Accumulator => 0,
             Implicit => 0,
             Immediate => self.pc + 1,
-            Absolute => join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1)),
-            ZeroPage => join_bytes(0x0, self.mem.get(self.pc + 1)),
-            ZeroPageX => join_bytes(0x0, self.mem.get(self.pc + 1).wrapping_add(self.x)),
-            ZeroPageY => join_bytes(0x0, self.mem.get(self.pc + 1).wrapping_add(self.y)),
-            Relative => {
-                let ptr = self.mem.get(self.pc + 1);
-                match (ptr & 0b1000_0000) == 0 {
-                    true => self.pc + (ptr as u16),
-                    false => self.pc - ((ptr & 0b0111_1111) as u16)
-                }
-            },
+            Absolute => self.absolute_addr(),
+            AbsoluteX => self.absolute_addr().wrapping_add(self.x as u16),
+            AbsoluteY => self.absolute_addr().wrapping_add(self.y as u16),
+            ZeroPage => join_bytes(0x0, self.next_byte()),
+            ZeroPageX => join_bytes(0x0, self.next_byte().wrapping_add(self.x)),
+            ZeroPageY => join_bytes(0x0, self.next_byte().wrapping_add(self.y)),
+            Relative => self.pc.wrapping_add((self.next_byte() as i8) as u16),
             Indirect => {
                 let addr = join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1));
                 let high_byte_addr = if (addr & 0x00FF) == 0x00FF {
@@ -417,18 +442,17 @@ impl Cpu {
                 join_bytes(self.mem.get(high_byte_addr), self.mem.get(addr))
             }
             IndirectX => {
-                let arg = self.mem.get(self.pc + 1).wrapping_add(self.x);
+                let arg = self.next_byte().wrapping_add(self.x);
                 let low = self.mem.get(join_bytes(0x0, arg));
                 let high = self.mem.get(join_bytes(0x0, arg.wrapping_add(1)));
                 join_bytes(high, low)
             },
             IndirectY => {
-                let arg = self.mem.get(self.pc + 1);
+                let arg = self.next_byte();
                 let low = self.mem.get(join_bytes(0x0, arg));
                 let high = self.mem.get(join_bytes(0x0, arg.wrapping_add(1)));
                 join_bytes(high, low).wrapping_add(self.y as u16)
             }
-            _ => unimplemented!("can't resolve addr for opcode {:?}", op)
         }
     }
 
@@ -449,17 +473,7 @@ impl Cpu {
     /// instruction in the first place.
     fn set_pause_and_return_shift(&mut self, pause: u8, op: &Opcode) -> u16 {
         self.remaining_pause = pause;
-        match op.1 {
-            // no arg
-            Accumulator | Implicit => 1,
-
-            // 1 byte arg
-            ZeroPage | ZeroPageX | ZeroPageY | Relative => 2,
-            Immediate | Indirect | IndirectX | IndirectY => 2,
-
-            // 2 byte arg
-            Absolute | AbsoluteX | AbsoluteY => 3,
-        }
+        op.1.byte_count()
     }
 
     fn _group_1_pause_and_shift(&mut self, op: &Opcode) -> u16 {
@@ -773,9 +787,9 @@ impl Cpu {
         match op.1 {
             Immediate => self.set_pause_and_return_shift(1, op),
             ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX => self.set_pause_and_return_shift(3, op),
+            ZeroPageY => self.set_pause_and_return_shift(3, op),
             Absolute => self.set_pause_and_return_shift(3, op),
-            IndirectX => self.set_pause_and_return_shift(5, op),
+            AbsoluteY => self.set_pause_and_return_shift(5, op),
             _ => unimplemented!()
         }
     }
@@ -789,7 +803,7 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(2, op),
             ZeroPageX => self.set_pause_and_return_shift(3, op),
             Absolute => self.set_pause_and_return_shift(3, op),
-            IndirectX => self.set_pause_and_return_shift(5, op),
+            AbsoluteX => self.set_pause_and_return_shift(5, op),
             _ => unimplemented!()
         }
     }
@@ -818,9 +832,9 @@ impl Cpu {
         }
     }
 
-    fn nop(&mut self, _op: &Opcode) -> u16 {
+    fn nop(&mut self, op: &Opcode) -> u16 {
         self.remaining_pause = 2;
-        1
+        op.1.byte_count()
     }
 
     fn ora(&mut self, op: &Opcode) -> u16 {
@@ -955,7 +969,7 @@ impl Cpu {
         self.mem.set(self.resolve_addr(op), value);
         match op.1 {
             ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(3, op),
+            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op),
             AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(4, op),
             IndirectX | IndirectY => self.set_pause_and_return_shift(5, op),
             _ => unreachable!()
