@@ -380,6 +380,8 @@ const SIGN_BIT: u8 = 0b1000_0000;
 
 const CARRY_FLAG: u8 = 0b0000_0001;
 const ZERO_FLAG: u8 = 0b0000_0010;
+const INTERRUPT_DISABLE_FLAG: u8 = 0b0000_0100;
+const DECIMAL_FLAG: u8 = 0b0000_1000;
 const OVERFLOW_FLAG: u8 = 0b0100_0000;
 const NEGATIVE_FLAG: u8 = SIGN_BIT;
 
@@ -615,11 +617,11 @@ impl Cpu {
     }
 
     fn set_interrupt_disable(&mut self, interrupt_disable: bool) {
-        self.set_flag(0b0000_0100, interrupt_disable);
+        self.set_flag(INTERRUPT_DISABLE_FLAG, interrupt_disable);
     }
 
     fn set_decimal(&mut self, decimal: bool) {
-        self.set_flag(0b0000_1000, decimal);
+        self.set_flag(DECIMAL_FLAG, decimal);
     }
 
     fn set_overflow(&mut self, overflow: bool) {
