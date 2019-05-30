@@ -540,7 +540,7 @@ impl Cpu {
             SAX => self.sax(op),
 
             // "illegal", and just do two regular things
-            DCP => self.illegal_op(op, |cpu, opc| {cpu.dec(opc); cpu.compare(opc, cpu.a);}),
+            DCP => self.illegal_op(op, |cpu, opc| {cpu.dec(opc); cpu.compare_op(opc, cpu.a);}),
             ISC => self.illegal_op(op, |cpu, opc| {cpu.inc(opc); cpu.sbc(opc);}),
             SLO => self.illegal_op(op, |cpu, opc| {cpu.asl(opc); cpu.ora(opc);}),
             SRE => self.illegal_op(op, |cpu, opc| {cpu.lsr(opc); cpu.eor(opc);}),
@@ -548,19 +548,19 @@ impl Cpu {
             RLA => self.illegal_op(op, |cpu, opc| {cpu.rol(opc); cpu.and(opc);}),
 
             // comparisons
-            CMP => self.compare(op, self.a),
-            CPX => self.compare(op, self.x),
-            CPY => self.compare(op, self.y),
+            CMP => self.compare_op(op, self.a),
+            CPX => self.compare_op(op, self.x),
+            CPY => self.compare_op(op, self.y),
 
             // branches
-            BCS => self.branch(op, self.carry()),
-            BCC => self.branch(op, !self.carry()),
-            BEQ => self.branch(op, self.zero()),
-            BNE => self.branch(op, !self.zero()),
-            BVS => self.branch(op, self.overflow()),
-            BVC => self.branch(op, !self.overflow()),
-            BMI => self.branch(op, self.negative()),
-            BPL => self.branch(op, !self.negative()),
+            BCS => self.branch_op(op, self.carry()),
+            BCC => self.branch_op(op, !self.carry()),
+            BEQ => self.branch_op(op, self.zero()),
+            BNE => self.branch_op(op, !self.zero()),
+            BVS => self.branch_op(op, self.overflow()),
+            BVC => self.branch_op(op, !self.overflow()),
+            BMI => self.branch_op(op, self.negative()),
+            BPL => self.branch_op(op, !self.negative()),
 
             // simple flag settings
             SEC => self.flag_op(|cpu| cpu.set_carry(true)),
@@ -707,7 +707,7 @@ impl Cpu {
         }
     }
 
-    fn branch(&mut self, op: &Opcode, branch: bool) -> u16 {
+    fn branch_op(&mut self, op: &Opcode, branch: bool) -> u16 {
         self.remaining_pause = 2;
         if branch {
             self.pc = self.resolve_addr(op);
@@ -717,7 +717,7 @@ impl Cpu {
         2 // account for the 2 bytes this instruction used
     }
 
-    fn compare(&mut self, op: &Opcode, to: u8) -> u16 {
+    fn compare_op(&mut self, op: &Opcode, to: u8) -> u16 {
         let value = self.mem.get(self.resolve_addr(op));
         self.set_carry(to >= value);
         self.set_zero(to == value);
