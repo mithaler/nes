@@ -477,13 +477,25 @@ impl Cpu {
     }
 
     fn _group_1_pause_and_shift(&mut self, op: &Opcode) -> u16 {
+        // ZeroPageY isn't actually part of these, but LDX allows it and is otherwise identical
         match op.1 {
             Immediate => self.set_pause_and_return_shift(1, op),
             ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(3, op),
+            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op),
             AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(3, op),  // TODO page crossing???
             IndirectX => self.set_pause_and_return_shift(5, op),
             IndirectY => self.set_pause_and_return_shift(4, op),  // TODO page crossing???
+            _ => unreachable!()
+        }
+    }
+
+    fn _illegal_opcodes_pause_and_shift(&mut self, op: &Opcode) -> u16 {
+        match op.1 {
+            Absolute => self.set_pause_and_return_shift(5, op),
+            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(6, op),
+            ZeroPage => self.set_pause_and_return_shift(4, op),
+            ZeroPageX => self.set_pause_and_return_shift(5, op),
+            IndirectX | IndirectY => self.set_pause_and_return_shift(7, op),
             _ => unreachable!()
         }
     }
@@ -518,11 +530,20 @@ impl Cpu {
             ROR => self.ror(op),
             RTI => self.rti(op),
             RTS => self.rts(op),
-            RRA => self.rra(op),
             SBC => self.sbc(op),
             STA => self.sta(op),
             STX => self.stx(op),
             STY => self.sty(op),
+
+            // "illegal"
+            DCP => self.dcp(op),
+            ISC => self.isc(op),
+            LAX => self.lax(op),
+            SAX => self.sax(op),
+            SLO => self.slo(op),
+            SRE => self.sre(op),
+            RRA => self.rra(op),
+            RLA => self.rla(op),
 
             // comparisons
             CMP => self.compare(op, self.a),
@@ -615,7 +636,9 @@ impl Cpu {
 
     // Opcodes!
 
-    fn adc_internal(&mut self, value: u8) -> u8 {
+    fn adc(&mut self, op: &Opcode) -> u16 {
+        let addr = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         let signed_sum = (value as i8 as i16) + (self.a as i8 as i16) + (self.carry() as i16);
         let (first_add, overflowing1) = self.a.overflowing_add(value);
         let (second_add, overflowing2) = first_add.overflowing_add(if self.carry() { 1 } else { 0 });
@@ -623,13 +646,6 @@ impl Cpu {
         self.set_carry(overflowing1 || overflowing2);
         self.set_value_flags(self.a);
         self.set_overflow(signed_sum < -128 || signed_sum > 127);
-        second_add
-    }
-
-    fn adc(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
-        let mem_value = self.mem.get(addr);
-        self.adc_internal(mem_value);
         self._group_1_pause_and_shift(op)
     }
 
@@ -660,6 +676,9 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(4, op),
             ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
             AbsoluteX => self.set_pause_and_return_shift(6, op),
+
+            // used by SLO, overridden by it
+            AbsoluteY | IndirectX | IndirectY => 0,
             _ => unreachable!()
         }
     }
@@ -695,6 +714,12 @@ impl Cpu {
         self._group_1_pause_and_shift(op)
     }
 
+    fn dcp(&mut self, op: &Opcode) -> u16 {
+        self.dec(op);
+        self.compare(op, self.a);
+        self._illegal_opcodes_pause_and_shift(op)
+    }
+
     fn dec(&mut self, op: &Opcode) -> u16 {
         let addr = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, true);
@@ -728,7 +753,7 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(4, op),
             ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
             AbsoluteX => self.set_pause_and_return_shift(6, op),
-            _ => unreachable!()
+            _ => 0 // reachable only via illegal opcodes, which overwrite this anyway
         })
     }
 
@@ -751,6 +776,12 @@ impl Cpu {
         shift
     }
 
+    fn isc(&mut self, op: &Opcode) -> u16 {
+        self.inc(op);
+        self.sbc(op);
+        self._illegal_opcodes_pause_and_shift(op)
+    }
+
     fn jmp(&mut self, op: &Opcode) -> u16 {
         self.pc = self.resolve_addr(op);
         match op.1 {
@@ -771,6 +802,20 @@ impl Cpu {
         0 // this is a jump, we don't advance normally
     }
 
+    fn lax(&mut self, op: &Opcode) -> u16 {
+        self.lda(op);
+        self.transfer_op(|cpu| { cpu.x = cpu.a; (cpu.x, true) });
+        self.set_value_flags(self.x);
+        match op.1 {
+            IndirectX => self.set_pause_and_return_shift(5, op),
+            ZeroPage => self.set_pause_and_return_shift(2, op),
+            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op),
+            IndirectY => self.set_pause_and_return_shift(3, op),
+            AbsoluteY => self.set_pause_and_return_shift(3, op),
+            _ => unreachable!()
+        }
+    }
+
     // TODO these only differ by register; is there some way to make them one func?
 
     fn lda(&mut self, op: &Opcode) -> u16 {
@@ -784,28 +829,14 @@ impl Cpu {
         let value = self.mem.get(self.resolve_addr(op));
         self.x = value;
         self.set_value_flags(value);
-        match op.1 {
-            Immediate => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageY => self.set_pause_and_return_shift(3, op),
-            Absolute => self.set_pause_and_return_shift(3, op),
-            AbsoluteY => self.set_pause_and_return_shift(5, op),
-            _ => unimplemented!()
-        }
+        self._group_1_pause_and_shift(op)
     }
 
     fn ldy(&mut self, op: &Opcode) -> u16 {
         let value = self.mem.get(self.resolve_addr(op));
         self.y = value;
         self.set_value_flags(value);
-        match op.1 {
-            Immediate => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX => self.set_pause_and_return_shift(3, op),
-            Absolute => self.set_pause_and_return_shift(3, op),
-            AbsoluteX => self.set_pause_and_return_shift(5, op),
-            _ => unimplemented!()
-        }
+        self._group_1_pause_and_shift(op)
     }
 
     fn lsr(&mut self, op: &Opcode) -> u16 {
@@ -828,6 +859,9 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(4, op),
             ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
             AbsoluteX => self.set_pause_and_return_shift(6, op),
+
+            // used by SRE and overridden by it
+            AbsoluteY | IndirectX | IndirectY => 0,
             _ => unreachable!()
         }
     }
@@ -892,6 +926,9 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(4, op),
             ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
             AbsoluteX => self.set_pause_and_return_shift(6, op),
+
+            // used by RLA, overridden by it
+            AbsoluteY | IndirectX | IndirectY => 0,
             _ => unreachable!()
         }
     }
@@ -920,22 +957,23 @@ impl Cpu {
             ZeroPage => self.set_pause_and_return_shift(4, op),
             ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
             AbsoluteX => self.set_pause_and_return_shift(6, op),
+
+            // used by RRA, overridden by it
+            AbsoluteY | IndirectX | IndirectY => 0,
             _ => unreachable!()
         }
     }
 
     fn rra(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
-        let val = self.ror_internal(self.mem.get(addr));
-        self.adc_internal(val);
-        match op.1 {
-            Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(6, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX => self.set_pause_and_return_shift(5, op),
-            IndirectX | IndirectY => self.set_pause_and_return_shift(7, op),
-            _ => unreachable!()
-        }
+        self.ror(op);
+        self.adc(op);
+        self._illegal_opcodes_pause_and_shift(op)
+    }
+
+    fn rla(&mut self, op: &Opcode) -> u16 {
+        self.rol(op);
+        self.and(op);
+        self._illegal_opcodes_pause_and_shift(op)
     }
 
     fn rti(&mut self, op: &Opcode) -> u16 {
@@ -953,6 +991,16 @@ impl Cpu {
         1  // advance once byte!
     }
 
+    fn sax(&mut self, op: &Opcode) -> u16 {
+        self.mem.set(self.resolve_addr(op), self.a & self.x);
+        match op.1 {
+            ZeroPage => self.set_pause_and_return_shift(2, op),
+            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op),
+            IndirectX => self.set_pause_and_return_shift(5, op),
+            _ => unreachable!()
+        }
+    }
+
     fn sbc(&mut self, op: &Opcode) -> u16 {
         let value = self.mem.get(self.resolve_addr(op));
         let signed_sum = (value as i8 as i16) - (self.a as i8 as i16) - (1 - (self.carry() as i16));
@@ -963,6 +1011,18 @@ impl Cpu {
         self.set_value_flags(self.a);
         self.set_overflow(signed_sum < -128 || signed_sum > 127);
         self._group_1_pause_and_shift(op)
+    }
+
+    fn slo(&mut self, op: &Opcode) -> u16 {
+        self.asl(op);
+        self.ora(op);
+        self._illegal_opcodes_pause_and_shift(op)
+    }
+
+    fn sre(&mut self, op: &Opcode) -> u16 {
+        self.lsr(op);
+        self.eor(op);
+        self._illegal_opcodes_pause_and_shift(op)
     }
 
     fn store(&mut self, op: &Opcode, value: u8) -> u16 {
@@ -1008,7 +1068,7 @@ impl Clocked for Cpu {
 
         self.instruction_counter += 1;
         let op = opcodes::resolve(self.mem.get(self.pc));
-        println!("{:?} @ {:04X?} (A:{:02X?} X:{:02X?} Y:{:02X?} P:{:02X?} SP:{:02X?}): {:?}: {:X?}",
+        println!("{:?} @ {:04X?} (A:{:02X?} X:{:02X?} Y:{:02X?} P:{:02X?} SP:{:02X?}): {:?}: {:04X?}",
                  self.instruction_counter, self.pc, self.a, self.x, self.y, self.p, self.s,
                  op, self.resolve_addr(op));
         self.execute_opcode(op);

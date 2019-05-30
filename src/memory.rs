@@ -24,7 +24,7 @@ impl CpuMem {
             ram: initialized_mem(0x800),  // randomized on a real console
             prg_rom,
             ppu_registers: initialized_mem(8),
-            apu_registers: initialized_mem(18)
+            apu_registers: initialized_mem(0x18)
         }
     }
 }
