@@ -5,8 +5,10 @@ use std::str;
 mod cpu;
 mod common;
 mod memory;
+mod ppu;
 
 use crate::cpu::Cpu;
+use crate::ppu::Ppu;
 use crate::memory::{Mem, mem};
 use crate::common::Clocked;
 
@@ -37,9 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let rom: Mem = Box::new(fs::read(&args[1])?);
 
-    let (prg_rom, _chr_rom) = rom_sections(rom);
+    let (prg_rom, chr_rom) = rom_sections(rom);
 
     let mut cpu = Cpu::new(prg_rom);
+    let mut ppu = Ppu::new(chr_rom);
     // TODO figure out pausing
     loop {
         cpu.tick();

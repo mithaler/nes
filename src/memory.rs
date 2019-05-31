@@ -14,7 +14,7 @@ pub struct CpuMem {
 }
 
 fn initialized_mem(size: usize) -> Mem {
-    Box::new((0..size).map(|_| 0 as u8).collect())
+    Box::new(vec![0; size])
 }
 
 // https://wiki.nesdev.com/w/index.php/CPU_memory_map
@@ -23,7 +23,7 @@ impl CpuMem {
         CpuMem {
             ram: initialized_mem(0x800),  // randomized on a real console
             prg_rom,
-            ppu_registers: initialized_mem(8),
+            ppu_registers: initialized_mem(0x8),
             apu_registers: initialized_mem(0x18)
         }
     }
@@ -50,6 +50,40 @@ impl Addressable for CpuMem {
             0xC000... 0xFFFF => panic!("Can't write to ROM!"),
             _ => panic!()
         }
+    }
+}
+
+// https://wiki.nesdev.com/w/index.php/PPU_memory_map
+pub struct PpuMem {
+    chr_rom: Mem,
+    // TODO
+}
+
+type Pattern<'a> = (&'a[u8], &'a[u8]);
+
+impl PpuMem {
+    pub fn new(chr_rom: Mem) -> PpuMem {
+        PpuMem {
+            chr_rom
+        }
+    }
+
+    pub fn pattern(&self, num: u16) -> Pattern {
+        (&self.chr_rom[(num * 8) as usize .. ((num + 1) * 8) as usize],
+         &self.chr_rom[(num * 8 + 0x1000) as usize .. ((num + 1) * 8 + 0x1000) as usize])
+    }
+}
+
+impl Addressable for PpuMem {
+    fn get(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000 ... 0x1FFF => self.chr_rom[addr as usize],
+            _ => panic!()
+        }
+    }
+
+    fn set(&mut self, addr: u16, value: u8) {
+        unimplemented!()
     }
 }
 
