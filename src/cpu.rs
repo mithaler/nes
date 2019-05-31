@@ -385,6 +385,10 @@ const DECIMAL_FLAG: u8 = 0b0000_1000;
 const OVERFLOW_FLAG: u8 = 0b0100_0000;
 const NEGATIVE_FLAG: u8 = SIGN_BIT;
 
+const NMI_VECTOR: u16 = 0xFFFA;
+const RESET_VECTOR: u16 = 0xFFFC;
+const IRQ_VECTOR: u16 = 0xFFFE;
+
 // The mask of bits that get turned on when the P register is represented on the stack.
 const PHP_MASK: u8 = 0b0011_0000;
 
@@ -469,6 +473,27 @@ impl Cpu {
         // should this clear the byte it's pointing to? it'll be overwritten on next push
     }
 
+    /// Triggers an interrupt, with the `P` flag on the stack or'ed with the `b_mask`, and
+    /// pointing to the `vector` starting at the specified address.
+    fn interrupt(&mut self, b_mask: u8, vector: u16) {
+        self.stack_push((self.pc >> 8) as u8);
+        self.stack_push(self.pc as u8);
+        self.stack_push(self.p | b_mask);
+        self.pc = join_bytes(self.mem.get(vector + 1), self.mem.get(vector));
+    }
+
+    pub fn irq(&mut self) {
+        self.interrupt(0b0011_0000, IRQ_VECTOR)
+    }
+
+    pub fn nmi(&mut self) {
+        self.interrupt(0b0011_0000, NMI_VECTOR)
+    }
+
+    pub fn reset(&mut self) {
+        self.interrupt(0b0011_0000, RESET_VECTOR)
+    }
+
     /// Sets the remaining cycle pauses appropriately, and returns the number of bytes
     /// the program counter should advance. The cycle pause count should be _one lower than
     /// the documentation says_, because we're using up the first cycle executing the
@@ -509,6 +534,7 @@ impl Cpu {
             AND => self.and(op),
             ASL => self.asl(op),
             BIT => self.bit(op),
+            BRK => self.brk(op),
             EOR => self.eor(op),
             DEC => self.dec(op),
             DEX => self.dex(op),
@@ -717,6 +743,13 @@ impl Cpu {
             // TODO +2 if page crossed???
         }
         2 // account for the 2 bytes this instruction used
+    }
+
+    fn brk(&mut self, _op: &Opcode) -> u16 {
+        self.pc += 1;
+        self.remaining_pause = 6;
+        self.interrupt(0b0011_0000, IRQ_VECTOR);
+        0
     }
 
     fn compare_op(&mut self, op: &Opcode, to: u8) -> u16 {
