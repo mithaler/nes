@@ -1,5 +1,6 @@
 use crate::common::{Clocked, Addressable, join_bytes};
-use crate::memory::{CpuMem, Mem};
+use crate::memory::{CpuMem};
+use crate::mappers::Mapper;
 
 mod opcodes {
     #[derive(Debug)]
@@ -393,14 +394,14 @@ const IRQ_VECTOR: u16 = 0xFFFE;
 const PHP_MASK: u8 = 0b0011_0000;
 
 impl Cpu {
-    pub fn new(prg_rom: Mem) -> Cpu {
+    pub fn new(mapper: Mapper) -> Cpu {
         // startup state: https://wiki.nesdev.com/w/index.php/CPU_power_up_state
         Cpu {
-            mem: Box::new(CpuMem::new(prg_rom)),
+            mem: Box::new(CpuMem::new(mapper)),
             a: 0,
             x: 0,
             y: 0,
-            pc: 0xC000,  // something something test program?
+            pc: 0x8000,  // might need to vary by mapper?
             s: 0xfd,
             p: 0x24,
             remaining_pause: 0,
@@ -416,7 +417,7 @@ impl Cpu {
         self.mem.get(self.pc + 1)
     }
 
-    /// Returns whether the addresses are on different 256-bit pages.
+    /// Returns whether the addresses are on different 256-byte pages.
     fn different_pages(addr1: u16, addr2: u16) -> bool {
         (addr1 & 0xFF00) != (addr2 & 0xFF00)
     }
@@ -439,11 +440,10 @@ impl Cpu {
             Relative => self.pc.wrapping_add((self.next_byte() as i8) as u16),
             Indirect => {
                 let addr = join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1));
-                let high_byte_addr = if (addr & 0x00FF) == 0x00FF {
+                let high_byte_addr = match (addr & 0x00FF) == 0x00FF {
                     // crazy 6502 bug!
-                    addr & 0xFF00
-                } else {
-                    addr + 1
+                    true => addr & 0xFF00,
+                    false => addr + 1
                 };
                 join_bytes(self.mem.get(high_byte_addr), self.mem.get(addr))
             }
@@ -483,7 +483,9 @@ impl Cpu {
     }
 
     pub fn irq(&mut self) {
-        self.interrupt(0b0011_0000, IRQ_VECTOR)
+        if !self.interrupt_disabled() {
+            self.interrupt(0b0011_0000, IRQ_VECTOR)
+        }
     }
 
     pub fn nmi(&mut self) {
@@ -632,6 +634,10 @@ impl Cpu {
 
     fn negative(&self) -> bool {
         (self.p & NEGATIVE_FLAG) != 0
+    }
+
+    fn interrupt_disabled(&self) -> bool {
+        (self.p & INTERRUPT_DISABLE_FLAG) != 0
     }
 
     fn set_carry(&mut self, carry: bool) {
