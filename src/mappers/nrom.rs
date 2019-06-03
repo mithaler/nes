@@ -9,13 +9,40 @@ enum RomSize {
     ThirtyTwo,
 }
 
+#[derive(Debug)]
+enum NametableMirroring {
+    Horizontal,
+    Vertical
+}
+
+impl NametableMirroring {
+    fn mirrored_addr(&self, addr: u16) -> usize {
+        usize::from(match self {
+            NametableMirroring::Horizontal => {
+                match addr {
+                    0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
+                    0x2400 ... 0x27FF | 0x2C00 ... 0x2EFF => addr & 0b1111_1011_1111_1111,
+                    _ => unreachable!(),
+                }
+            },
+            NametableMirroring::Vertical => {
+                match addr {
+                    0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
+                    0x2400 ... 0x27FF | 0x2C00 ... 0x2EFF => addr & 0b1111_0111_1111_1111,
+                    _ => unreachable!(),
+                }
+            }
+        } - 0x2000)
+    }
+}
+
 pub struct Nrom {
     rom_size: RomSize,
     prg_ram: Option<Mem>,
     prg_rom: Mem,
     chr_rom: Mem,
     internal_vram: Mem,
-    trainer: Option<Mem>,
+    nametable_mirroring: NametableMirroring
 }
 
 impl Nrom {
@@ -26,17 +53,21 @@ impl Nrom {
             true => Some(initialized_mem(0x2000)),
             false => None,
         };
+        let nametable_mirroring = match (header[6] & 0b0000_0001) == 1 {
+            true => NametableMirroring::Vertical,
+            false => NametableMirroring::Horizontal
+        };
         println!(
-            "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}",
+            "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             prg_rom_size * 0x4000,
             chr_rom_size * 0x2000,
-            prg_ram.is_some()
+            prg_ram.is_some(),
+            nametable_mirroring
         );
 
-        let trainer = match (header[6] & 0b0000_1000) != 0 {
-            true => unimplemented!("omg i have no idea what to do with a trainer"),
-            false => None,
-        };
+        if (header[6] & 0b0000_1000) != 0 {
+            unimplemented!("omg i have no idea what to do with a trainer");
+        }
 
         let (rom_size, prg_rom, chr_rom) = match prg_rom_size {
             1 => (
@@ -57,7 +88,7 @@ impl Nrom {
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
-            trainer,
+            nametable_mirroring
         }
     }
 
@@ -69,7 +100,7 @@ impl Nrom {
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
-            trainer: None
+            nametable_mirroring: NametableMirroring::Horizontal
         }
     }
 }
@@ -98,7 +129,7 @@ impl Mapping for Nrom {
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[addr as usize],
-            0x2000 ... 0x2FFF => self.internal_vram[(addr - 0x2000) as usize],
+            0x2000 ... 0x2FFF => self.internal_vram[self.nametable_mirroring.mirrored_addr(addr)],
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
@@ -106,8 +137,8 @@ impl Mapping for Nrom {
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[addr as usize] = value,
-            0x2000 ... 0x2FFF => self.internal_vram[(addr - 0x2000) as usize] = value,
+            0x0 ... 0x1FFF => self.chr_rom[addr as usize] = value, // sometimes RAM, sometimes ROM
+            0x2000 ... 0x2FFF => self.internal_vram[self.nametable_mirroring.mirrored_addr(addr)] = value,
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }

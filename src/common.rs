@@ -1,3 +1,15 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// A heap-allocated, mutably shared object. Currently assumes the application is
+/// single-threaded; the underlying implementation of how this is shared will change
+/// if we ever make it multi-threaded.
+pub type Shared<T> = Rc<RefCell<T>>;
+
+pub fn shared<T>(t: T) -> Shared<T> {
+    Rc::new(RefCell::new(t))
+}
+
 pub trait Addressable {
     fn get(&self, addr: u16) -> u8;
     fn set(&mut self, addr: u16, value: u8);

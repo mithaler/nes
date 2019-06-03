@@ -1,6 +1,5 @@
 use crate::common::{Clocked, Addressable, join_bytes};
 use crate::memory::{CpuMem};
-use crate::mappers::Mapper;
 
 mod opcodes {
     #[derive(Debug)]
@@ -394,19 +393,23 @@ const IRQ_VECTOR: u16 = 0xFFFE;
 const PHP_MASK: u8 = 0b0011_0000;
 
 impl Cpu {
-    pub fn new(mapper: Mapper) -> Cpu {
+    pub fn new(mem: Box<CpuMem>, test_mode: bool) -> Cpu {
         // startup state: https://wiki.nesdev.com/w/index.php/CPU_power_up_state
-        Cpu {
-            mem: Box::new(CpuMem::new(mapper)),
+        let mut out = Cpu {
+            mem,
             a: 0,
             x: 0,
             y: 0,
-            pc: 0x8000,  // might need to vary by mapper?
+            pc: 0x8000,
             s: 0xfd,
             p: 0x24,
             remaining_pause: 0,
             instruction_counter: 0,
+        };
+        if !test_mode {
+            out.pc = join_bytes(out.mem.get(RESET_VECTOR + 1), out.mem.get(RESET_VECTOR));
         }
+        out
     }
 
     fn absolute_addr(&self) -> u16 {
@@ -753,6 +756,9 @@ impl Cpu {
 
     fn brk(&mut self, _op: &Opcode) -> u16 {
         self.pc += 1;
+        if self.interrupt_disabled() {
+            return 0;
+        }
         self.remaining_pause = 6;
         self.interrupt(0b0011_0000, IRQ_VECTOR);
         0
@@ -1078,6 +1084,9 @@ impl Cpu {
 
 impl Clocked for Cpu {
     fn tick(&mut self) {
+        if self.instruction_counter > 30000 {
+            panic!()
+        }
         if self.remaining_pause > 0 {
             self.remaining_pause -= 1;
             return

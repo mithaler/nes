@@ -1,22 +1,30 @@
-use crate::mappers::Mapper;
+use crate::common::{Clocked, Shared};
+use crate::cpu::Cpu;
 use crate::memory::PpuMem;
 
 pub struct Ppu {
-    mem: PpuMem,
+    mem: Shared<PpuMem>,
+    cpu: Shared<Cpu>,
+
+    scanline: i16,  // -1 - 261
+    tick: u16  // 0 - 340
 }
 
 type Tile = Vec<Vec<u8>>;
 
 impl Ppu {
-    pub fn new(mapper: Mapper) -> Ppu {
+    pub fn new(ppu_mem: Shared<PpuMem>, cpu: Shared<Cpu>) -> Ppu {
         // startup state: https://wiki.nesdev.com/w/index.php/PPU_power_up_state
         Ppu {
-            mem: PpuMem::new(mapper),
+            mem: ppu_mem,
+            cpu,
+            scanline: -1,
+            tick: 0,
         }
     }
 
     fn pattern(&self, num: u16) -> Tile {
-        let pattern = self.mem.pattern(num);
+        let pattern = self.mem.borrow().pattern(num);
         let iter = pattern.0.iter().zip(pattern.1.iter());
 
         let mut ret: Tile = Vec::with_capacity(8);
@@ -38,6 +46,64 @@ impl Ppu {
             ret.push(row);
         }
         ret
+    }
+
+    fn dummy_scanline(&mut self) {
+        // TODO even/odd frame
+        if self.tick == 1 {
+            println!("-- EXITING VBLANK --");
+            self.mem.borrow_mut().set_vblank(false);  // TODO sprite 0 hit, overflow
+        }
+    }
+
+    fn vblank_scanline(&mut self) {
+        if self.scanline == 241 && self.tick == 1 {
+            println!("-- ENTERING VBLANK --");
+            self.mem.borrow_mut().set_vblank(true);
+            if (self.mem.borrow().get_ppuctrl() & 0b1000_0000) != 0 {
+                self.cpu.borrow_mut().nmi();
+            }
+        }
+    }
+
+    fn visible_scanline(&mut self) {
+        let ppumask = self.mem.borrow().get_ppumask();
+        if (ppumask & 0b00001000) != 0 {
+            //self.render_background();
+        }
+        if (ppumask & 0b00010000) != 0 {
+            //self.render_sprite();
+        }
+        // TODO sprite priority?
+    }
+
+    fn render(&mut self) {
+        //println!("Scanline {:?}, Tick {:?}", self.scanline, self.tick);
+        match self.scanline {
+            -1 => self.dummy_scanline(),
+            0 ... 239 => self.visible_scanline(),
+            240 => {},  // post-render
+            241 ... 260 => self.vblank_scanline(),
+            _ => unreachable!()
+        }
+        self.tick = match self.tick {
+            t @ 0 ... 340 => t + 1,
+            341 => {
+                self.scanline = match self.scanline {
+                    s @ -1 ... 259 => s + 1,
+                    260 => -1,
+                    _ => unreachable!()
+                };
+                0
+            },
+            _ => unreachable!()
+        }
+    }
+}
+
+impl Clocked for Ppu {
+    fn tick(&mut self) {
+        self.render();
     }
 }
 
