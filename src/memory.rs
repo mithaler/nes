@@ -37,7 +37,7 @@ impl Addressable for CpuMem {
             0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize],
             0x2000 ... 0x3FFF => self.bus.borrow_mut().get(((addr - 0x2000) & 0x7) + 0x2000),
             0x4000 ... 0x4017 => self.apu_registers[(addr - 0x4000) as usize],
-            // TODO support other mappers; C000 is for small carts
+            // 0x4018 ... 0x401F used only for internal testing
             0x4020 ... 0xFFFF => self.mapper.borrow().get_cpu_space(addr),
             _ => panic!()
         }
@@ -48,7 +48,7 @@ impl Addressable for CpuMem {
             0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize] = value,
             0x2000 ... 0x3FFF => self.bus.borrow_mut().set(((addr - 0x2000) & 0x7) + 0x2000, value),
             0x4000 ... 0x4017 => self.apu_registers[(addr - 0x4000) as usize] = value,
-            // TODO support RAM inside the cart at 6000 - 7FFF
+            // 0x4018 ... 0x401F used only for internal testing
             0x4020 ... 0xFFFF => self.mapper.borrow_mut().set_cpu_space(addr, value),
             _ => panic!()
         }
