@@ -1,6 +1,6 @@
 // Mapper 000: https://wiki.nesdev.com/w/index.php/NROM
 
-use crate::mappers::Mapping;
+use crate::mappers::{Mapping, NametableMirror};
 use crate::memory::{initialized_mem, mem, Mem};
 
 // Mapper 000 supports ROM sizes of either 16 or 32 KB.
@@ -9,40 +9,13 @@ enum RomSize {
     ThirtyTwo,
 }
 
-#[derive(Debug)]
-enum NametableMirroring {
-    Horizontal,
-    Vertical
-}
-
-impl NametableMirroring {
-    fn mirrored_addr(&self, addr: u16) -> usize {
-        usize::from(match self {
-            NametableMirroring::Horizontal => {
-                match addr {
-                    0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
-                    0x2400 ... 0x27FF | 0x2C00 ... 0x2EFF => addr & 0b1111_1011_1111_1111,
-                    _ => unreachable!(),
-                }
-            },
-            NametableMirroring::Vertical => {
-                match addr {
-                    0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
-                    0x2400 ... 0x27FF | 0x2C00 ... 0x2EFF => addr & 0b1111_0111_1111_1111,
-                    _ => unreachable!(),
-                }
-            }
-        } - 0x2000)
-    }
-}
-
 pub struct Nrom {
     rom_size: RomSize,
     prg_ram: Option<Mem>,
     prg_rom: Mem,
     chr_rom: Mem,
     internal_vram: Mem,
-    nametable_mirroring: NametableMirroring
+    nametable_mirror: NametableMirror
 }
 
 impl Nrom {
@@ -53,16 +26,16 @@ impl Nrom {
             true => Some(initialized_mem(0x2000)),
             false => None,
         };
-        let nametable_mirroring = match (header[6] & 0b0000_0001) == 1 {
-            true => NametableMirroring::Vertical,
-            false => NametableMirroring::Horizontal
+        let nametable_mirror = match (header[6] & 0b0000_0001) == 1 {
+            true => NametableMirror::Vertical,
+            false => NametableMirror::Horizontal
         };
         println!(
             "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             prg_rom_size * 0x4000,
             chr_rom_size * 0x2000,
             prg_ram.is_some(),
-            nametable_mirroring
+            nametable_mirror
         );
 
         if (header[6] & 0b0000_1000) != 0 {
@@ -88,8 +61,12 @@ impl Nrom {
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
-            nametable_mirroring
+            nametable_mirror
         }
+    }
+
+    fn mirrored_addr(&self, addr: u16) -> usize {
+        self.nametable_mirror.mirrored_addr(addr) - 0x2000
     }
 
     #[cfg(test)]
@@ -100,7 +77,7 @@ impl Nrom {
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
-            nametable_mirroring: NametableMirroring::Horizontal
+            nametable_mirror: NametableMirror::Horizontal
         }
     }
 }
@@ -121,7 +98,7 @@ impl Mapping for Nrom {
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to read it!")[(addr - 0x6000) as usize] = value,
+            0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
             _ => panic!("Tried to write to CPU address space outside RAM! (addr {:04X?})", addr),
         }
     }
@@ -129,7 +106,7 @@ impl Mapping for Nrom {
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[addr as usize],
-            0x2000 ... 0x2FFF => self.internal_vram[self.nametable_mirroring.mirrored_addr(addr)],
+            0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
@@ -138,7 +115,10 @@ impl Mapping for Nrom {
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[addr as usize] = value, // sometimes RAM, sometimes ROM
-            0x2000 ... 0x2FFF => self.internal_vram[self.nametable_mirroring.mirrored_addr(addr)] = value,
+            0x2000 ... 0x2FFF => {
+                let addr = self.mirrored_addr(addr);
+                self.internal_vram[addr] = value
+            },
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }
