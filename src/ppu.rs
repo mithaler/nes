@@ -1,4 +1,4 @@
-use crate::common::{Clocked, Shared};
+use crate::common::{Clocked, Shared, Addressable};
 use crate::cpu::Cpu;
 use crate::memory::PpuMem;
 
@@ -46,6 +46,11 @@ impl Ppu {
             ret.push(row);
         }
         ret
+    }
+
+    fn tile_num(&self, x: u16, y: u16) -> u8 {
+        let addr = 0x2000 + x + (y * 0x20);
+        self.mem.borrow().get(addr)
     }
 
     fn dummy_scanline(&mut self) {
@@ -110,7 +115,11 @@ impl Clocked for Ppu {
 #[cfg(test)]
 mod tests {
     use super::Ppu;
+    use crate::bus::Bus;
+    use crate::common::shared;
     use crate::mappers::test_mapper;
+    use crate::memory::{CpuMem, PpuMem};
+    use crate::cpu::Cpu;
 
     const LEFT: [u8; 8] = [0x41, 0xC2, 0x44, 0x48, 0x10, 0x20, 0x40, 0x80];
     const RIGHT: [u8; 8] = [0x01, 0x02, 0x04, 0x08, 0x16, 0x21, 0x42, 0x87];
@@ -138,9 +147,16 @@ mod tests {
         Box::new(chr_rom)
     }
 
+    fn test_ppu() -> Ppu {
+        let mapper = test_mapper(&[], test_pattern().as_slice());
+        let bus = Bus::new(shared(PpuMem::new(mapper.clone())));
+        let cpu = shared(Cpu::new(Box::new(CpuMem::new(mapper.clone(), bus)), true));
+        Ppu::new(shared(PpuMem::new(mapper.clone())), cpu)
+    }
+
     #[test]
     fn pattern_overlay() {
-        let test_ppu = Ppu::new(test_mapper(&[], test_pattern().as_slice()));
+        let test_ppu = test_ppu();
         let tile = test_ppu.pattern(1u16);
         assert_eq!(tile.len(), 8);
         for (idx, row) in tile.iter().enumerate() {

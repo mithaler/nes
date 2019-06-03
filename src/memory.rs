@@ -150,20 +150,27 @@ mod tests {
 
     mod cpu_mem {
         use super::TEST_MEM;
-        use crate::common::Addressable;
+        use crate::bus::Bus;
+        use crate::common::{Addressable, shared};
         use crate::memory::*;
-        use crate::mappers::test_mapper;
+        use crate::mappers::{Mapper, test_mapper};
+
+        fn test_mem() -> (CpuMem, Mapper) {
+            let mapper = test_mapper(TEST_MEM, &[]);
+            let bus = Bus::new(shared(PpuMem::new(mapper.clone())));
+            (CpuMem::new(mapper.clone(), bus), mapper.clone())
+        }
 
         #[test]
         fn test_read_and_write_ram() {
-            let mut cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
+            let (mut cpu, _mapper) = test_mem();
             cpu.set(0x400, 6);
             assert_eq!(cpu.get(0x400), 6 as u8)
         }
 
         #[test]
         fn test_read_and_write_ram_mirror() {
-            let mut cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
+            let (mut cpu, _mapper) = test_mem();
             cpu.set(0x400, 6);
             assert_eq!(cpu.get(0x800 + 0x400), 6);
             assert_eq!(cpu.get((0x800 * 2) + 0x400), 6);
@@ -175,22 +182,25 @@ mod tests {
 
         #[test]
         fn test_read_and_write_ppu_regs() {
-            let mut cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
-            cpu.set(0x2000, 6);
-            assert_eq!(cpu.get(0x2000), 6 as u8)
+            let (mut cpu, mapper) = test_mem();
+            cpu.set(0x2006, 0x20);
+            cpu.set(0x2006, 0x55);
+            cpu.set(0x2007, 6);
+            assert_eq!(mapper.borrow().get_ppu_space(0x2055), 6 as u8);
         }
 
         #[test]
         fn test_read_and_write_ram_ppu_regs_mirror() {
-            let mut cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
-            cpu.set(0x2001, 6);
-            assert_eq!(cpu.get(0x2000 + 0x8 + 0x1), 6);
-            assert_eq!(cpu.get(0x2000 + (0x5 * 0x8) + 0x1), 6);
+            let (mut cpu, mapper) = test_mem();
+            cpu.set(0x2006 + 0x8, 0x20);
+            cpu.set(0x2006 + (0x8 * 30), 0x55);
+            cpu.set(0x2007 + (0x8 * 100), 6);
+            assert_eq!(mapper.borrow().get_ppu_space(0x2055), 6 as u8);
         }
 
         #[test]
         fn test_read_rom() {
-            let cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
+            let (cpu, _mapper) = test_mem();
             assert_eq!(cpu.get(0xC000), 1);
             assert_eq!(cpu.get(0xC001), 2);
             assert_eq!(cpu.get(0xC002), 3);
@@ -199,7 +209,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn test_write_rom_panics() {
-            let mut cpu = CpuMem::new(test_mapper(TEST_MEM, &[]));
+            let (mut cpu, _mapper) = test_mem();
             cpu.set(0xC000, 5);
         }
     }
