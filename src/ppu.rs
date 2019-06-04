@@ -32,15 +32,14 @@ impl Ppu {
             let mut row = Vec::with_capacity(8);
             let mut bitmask = 0b1000_0000u8;
             for _ in (0u8..8u8).rev() {
-                row.push(if (bitmask & *left & *right) != 0 {
-                    3u8
-                } else if (right & bitmask) != 0 {
-                    2u8
-                } else if (left & bitmask) != 0 {
-                    1u8
-                } else {
-                    0u8
-                });
+                let mut out = 0;
+                if (left & bitmask) != 0 {
+                    out += 1;
+                }
+                if (right & bitmask) != 0 {
+                    out += 2
+                }
+                row.push(out);
                 bitmask >>= 1;
             }
             ret.push(row);
@@ -48,6 +47,8 @@ impl Ppu {
         ret
     }
 
+    /// Modifies the base memory address for the nametable the (x, y) coordinates belong in;
+    /// returns (x, y, base), where all three coordinates are indexed by the specific nametable.
     fn nametable_base_addr(mut x: u16, mut y: u16, mut base: u16) -> (u16, u16, u16) {
         if x >= 64 || y >= 60 {
             // Maybe do something clever here when we get to scrolling wraparound?
