@@ -48,9 +48,63 @@ impl Ppu {
         ret
     }
 
-    fn tile_num(&self, x: u16, y: u16) -> u8 {
-        let addr = 0x2000 + x + (y * 0x20);
+    fn nametable_base_addr(mut x: u16, mut y: u16, mut base: u16) -> (u16, u16, u16) {
+        if x >= 64 || y >= 60 {
+            // Maybe do something clever here when we get to scrolling wraparound?
+            panic!("Nametable coordinates out of bounds! (X: {:?}, Y: {:?})", x, y);
+        }
+        if x >= 32 {
+            base += 0x0400;
+            x -= 32;
+        }
+        if y >= 30 {
+            base += 0x0800;
+            y -= 30;
+        }
+        (x, y, base)
+    }
+
+    /// Returns the memory address of the tile at coordinates (x, y) in the nametable.
+    fn nametable_addr(x: u16, y: u16) -> u16 {
+        let (x_within, y_within, base) = Ppu::nametable_base_addr(x, y, 0x2000);
+        base + x_within + (y_within * 0x20)
+    }
+
+    /// Returns the memory address of the attribute byte for the nametable tile at (x, y).
+    fn tile_attr_addr(x: u16, y: u16) -> u16 {
+        let (x_within, y_within, base) = Ppu::nametable_base_addr(x, y, 0x23C0);
+        base + (x_within / 4) + ((y_within / 4) * 0x8)
+    }
+
+    /// Given the coordinates of a tile in the nametable, returns the byte representing the
+    /// tile in the nametable.
+    fn tile_pattern_num(&self, x: u16, y: u16) -> u8 {
+        let addr = Ppu::nametable_addr(x, y);
         self.mem.borrow().get(addr)
+    }
+
+    /// Given the coordinates of a tile in the nametable, returns the colorset number of the
+    /// tile (from 0 to 3).
+    fn tile_colorset(&self, x: u16, y: u16) -> u8 {
+        let mut attrs = self.mem.borrow().get(Ppu::tile_attr_addr(x, y));
+        let addr = Ppu::nametable_addr(x, y);
+        let right = match addr & 0b0000_0000_0000_0011 {
+            0 | 1 => false,
+            2 | 3 => true,
+            _ => unreachable!()
+        };
+        let bottom = match addr & 0b0000_0000_0111_1111 {
+            0 ... 0x3F => false,
+            0x40 ... 0x7F => true,
+            _ => unreachable!()
+        };
+        if right {
+            attrs >>= 2
+        }
+        if bottom {
+            attrs >>= 4
+        }
+        attrs & 0b0000_0011
     }
 
     fn dummy_scanline(&mut self) {
@@ -116,7 +170,7 @@ impl Clocked for Ppu {
 mod tests {
     use super::Ppu;
     use crate::bus::Bus;
-    use crate::common::shared;
+    use crate::common::{Addressable, Shared, shared};
     use crate::mappers::test_mapper;
     use crate::memory::{CpuMem, PpuMem};
     use crate::cpu::Cpu;
@@ -147,20 +201,90 @@ mod tests {
         Box::new(chr_rom)
     }
 
-    fn test_ppu() -> Ppu {
+    fn test_ppu() -> (Shared<PpuMem>, Ppu) {
         let mapper = test_mapper(&[], test_pattern().as_slice());
-        let bus = Bus::new(shared(PpuMem::new(mapper.clone())));
+        let ppu_mem = shared(PpuMem::new(mapper.clone()));
+        let bus = Bus::new(ppu_mem.clone());
         let cpu = shared(Cpu::new(Box::new(CpuMem::new(mapper.clone(), bus)), true));
-        Ppu::new(shared(PpuMem::new(mapper.clone())), cpu)
+        (ppu_mem.clone(), Ppu::new(ppu_mem.clone(), cpu))
     }
 
     #[test]
-    fn pattern_overlay() {
-        let test_ppu = test_ppu();
+    fn test_nametable_addr() {
+        assert_eq!(Ppu::nametable_addr(0, 0), 0x2000);
+        assert_eq!(Ppu::nametable_addr(31, 15), 0x21FF);
+        assert_eq!(Ppu::nametable_addr(32, 0), 0x2400);
+        assert_eq!(Ppu::nametable_addr(40, 20), 0x2688);
+        assert_eq!(Ppu::nametable_addr(10, 40), 0x294A);
+        assert_eq!(Ppu::nametable_addr(32, 31), 0x2C20);
+    }
+
+    #[test]
+    fn test_pattern_overlay() {
+        let (_ppumem, test_ppu) = test_ppu();
         let tile = test_ppu.pattern(1u16);
         assert_eq!(tile.len(), 8);
         for (idx, row) in tile.iter().enumerate() {
             assert_eq!(row.as_slice(), TILE[idx]);
         }
+    }
+
+    #[test]
+    fn test_tile_attrs_read() {
+        assert_eq!(Ppu::tile_attr_addr(0, 0), 0x23C0);
+        assert_eq!(Ppu::tile_attr_addr(39, 0), 0x27C1);
+        assert_eq!(Ppu::tile_attr_addr(10, 39), 0x2BD2);
+    }
+
+    #[test]
+    fn test_tile_read_addrs() {
+        let (ppu_mem, test_ppu) = test_ppu();
+        {
+            let mut borrowed = (*ppu_mem).borrow_mut();
+            // (0, 0)
+            borrowed.set(0x2000, 0xAE);
+            borrowed.set(0x23C0, 0xA7);
+
+            // (40, 0)
+            borrowed.set(0x2408, 0xBC);
+            borrowed.set(0x27C2, 0xA7);
+
+            // (10, 39)
+            borrowed.set(0x292A, 0x1F);
+            borrowed.set(0x2BD2, 0xA7);
+        }
+
+        let mut pattern_num = test_ppu.tile_pattern_num(0, 0);
+        assert_eq!(pattern_num, 0xAE);
+        let mut pattern_attr_addr = test_ppu.tile_colorset(0, 0);
+        assert_eq!(pattern_attr_addr, 3);
+
+        pattern_num = test_ppu.tile_pattern_num(40, 0);
+        assert_eq!(pattern_num, 0xBC);
+        pattern_attr_addr = test_ppu.tile_colorset(40, 0);
+        assert_eq!(pattern_attr_addr, 3);
+
+        pattern_num = test_ppu.tile_pattern_num(10, 39);
+        assert_eq!(pattern_num, 0x1F);
+        pattern_attr_addr = test_ppu.tile_colorset(10, 39);
+        assert_eq!(pattern_attr_addr, 1);
+
+        // count through all the tiles under $A7 in (0, 0)
+        assert_eq!(test_ppu.tile_colorset(0, 0), 3);
+        assert_eq!(test_ppu.tile_colorset(1, 0), 3);
+        assert_eq!(test_ppu.tile_colorset(2, 0), 1);
+        assert_eq!(test_ppu.tile_colorset(3, 0), 1);
+        assert_eq!(test_ppu.tile_colorset(0, 1), 3);
+        assert_eq!(test_ppu.tile_colorset(1, 1), 3);
+        assert_eq!(test_ppu.tile_colorset(2, 1), 1);
+        assert_eq!(test_ppu.tile_colorset(3, 1), 1);
+        assert_eq!(test_ppu.tile_colorset(0, 2), 2);
+        assert_eq!(test_ppu.tile_colorset(1, 2), 2);
+        assert_eq!(test_ppu.tile_colorset(2, 2), 2);
+        assert_eq!(test_ppu.tile_colorset(3, 2), 2);
+        assert_eq!(test_ppu.tile_colorset(0, 3), 2);
+        assert_eq!(test_ppu.tile_colorset(1, 3), 2);
+        assert_eq!(test_ppu.tile_colorset(2, 3), 2);
+        assert_eq!(test_ppu.tile_colorset(3, 3), 2);
     }
 }
