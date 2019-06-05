@@ -81,7 +81,8 @@ impl PpuMem {
         }
     }
 
-    pub fn pattern(&self, num: u16) -> Pattern {
+    pub fn pattern(&self, num_byte: u8) -> Pattern {
+        let num = num_byte as u16;
         let mut first = Vec::with_capacity(8);
         let mut second = Vec::with_capacity(8);
         for idx in (num * 8) .. ((num + 1) * 8) {

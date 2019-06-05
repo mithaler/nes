@@ -10,7 +10,13 @@ pub struct Ppu {
     tick: u16  // 0 - 340
 }
 
-type Tile = Vec<Vec<u8>>;
+struct Tile {
+    pattern: Vec<Vec<u8>>,
+    palette: u8,
+    num: u8,
+    x: u8,
+    y: u8,
+}
 
 impl Ppu {
     pub fn new(ppu_mem: Shared<PpuMem>, cpu: Shared<Cpu>) -> Ppu {
@@ -23,11 +29,11 @@ impl Ppu {
         }
     }
 
-    fn pattern(&self, num: u16) -> Tile {
+    fn pattern(&self, num: u8) -> Vec<Vec<u8>> {
         let pattern = self.mem.borrow().pattern(num);
         let iter = pattern.0.iter().zip(pattern.1.iter());
 
-        let mut ret: Tile = Vec::with_capacity(8);
+        let mut ret: Vec<Vec<u8>> = Vec::with_capacity(8);
         for (left, right) in iter {
             let mut row = Vec::with_capacity(8);
             let mut bitmask = 0b1000_0000u8;
@@ -49,7 +55,7 @@ impl Ppu {
 
     /// Modifies the base memory address for the nametable the (x, y) coordinates belong in;
     /// returns (x, y, base), where all three coordinates are indexed by the specific nametable.
-    fn nametable_base_addr(mut x: u16, mut y: u16, mut base: u16) -> (u16, u16, u16) {
+    fn nametable_base_addr(mut x: u8, mut y: u8, mut base: u16) -> (u16, u16, u16) {
         if x >= 64 || y >= 60 {
             // Maybe do something clever here when we get to scrolling wraparound?
             panic!("Nametable coordinates out of bounds! (X: {:?}, Y: {:?})", x, y);
@@ -62,31 +68,31 @@ impl Ppu {
             base += 0x0800;
             y -= 30;
         }
-        (x, y, base)
+        (x as u16, y as u16, base)
     }
 
     /// Returns the memory address of the tile at coordinates (x, y) in the nametable.
-    fn nametable_addr(x: u16, y: u16) -> u16 {
+    fn nametable_addr(x: u8, y: u8) -> u16 {
         let (x_within, y_within, base) = Ppu::nametable_base_addr(x, y, 0x2000);
-        base + x_within + (y_within * 0x20)
+        base + (x_within as u16) + ((y_within * 0x20) as u16)
     }
 
     /// Returns the memory address of the attribute byte for the nametable tile at (x, y).
-    fn tile_attr_addr(x: u16, y: u16) -> u16 {
+    fn tile_attr_addr(x: u8, y: u8) -> u16 {
         let (x_within, y_within, base) = Ppu::nametable_base_addr(x, y, 0x23C0);
         base + (x_within / 4) + ((y_within / 4) * 0x8)
     }
 
     /// Given the coordinates of a tile in the nametable, returns the byte representing the
     /// tile in the nametable.
-    fn tile_pattern_num(&self, x: u16, y: u16) -> u8 {
+    fn tile_pattern_num(&self, x: u8, y: u8) -> u8 {
         let addr = Ppu::nametable_addr(x, y);
         self.mem.borrow().get(addr)
     }
 
     /// Given the coordinates of a tile in the nametable, returns the colorset number of the
     /// tile (from 0 to 3).
-    fn tile_colorset(&self, x: u16, y: u16) -> u8 {
+    fn tile_colorset(&self, x: u8, y: u8) -> u8 {
         let mut attrs = self.mem.borrow().get(Ppu::tile_attr_addr(x, y));
         let addr = Ppu::nametable_addr(x, y);
         let right = match addr & 0b0000_0000_0000_0011 {
@@ -106,6 +112,13 @@ impl Ppu {
             attrs >>= 4
         }
         attrs & 0b0000_0011
+    }
+
+    fn tile(&self, x: u8, y: u8) -> Box<Tile> {
+        let num = self.tile_pattern_num(x, y);
+        let palette = self.tile_colorset(x, y);
+        let pattern = self.pattern(num);
+        Box::new(Tile {x, y, num, pattern, palette})
     }
 
     fn dummy_scanline(&mut self) {
@@ -223,7 +236,7 @@ mod tests {
     #[test]
     fn test_pattern_overlay() {
         let (_ppumem, test_ppu) = test_ppu();
-        let tile = test_ppu.pattern(1u16);
+        let tile = test_ppu.pattern(1);
         assert_eq!(tile.len(), 8);
         for (idx, row) in tile.iter().enumerate() {
             assert_eq!(row.as_slice(), TILE[idx]);
