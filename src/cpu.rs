@@ -1084,9 +1084,6 @@ impl Cpu {
 
 impl Clocked for Cpu {
     fn tick(&mut self) {
-        if self.instruction_counter > 30000 {
-            panic!()
-        }
         if self.remaining_pause > 0 {
             self.remaining_pause -= 1;
             return

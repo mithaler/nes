@@ -83,6 +83,18 @@ impl Ppu {
         base + (x_within / 4) + ((y_within / 4) * 0x8)
     }
 
+    /// Returns the memory address of a color by pixel value (0-3), palette number (0-3),
+    /// and whether it's a background (true) or sprite (false) palette.
+    fn color_addr(pixel_value: u8, palette_num: u8, background: bool) -> u16 {
+        let mut out = 0;
+        out |= pixel_value;
+        out |= palette_num << 2;
+        if !background {
+            out |= 0b0001_0000;
+        }
+        0x3F00 | (out as u16)
+    }
+
     /// Given the coordinates of a tile in the nametable, returns the byte representing the
     /// tile in the nametable.
     fn tile_pattern_num(&self, x: u8, y: u8) -> u8 {

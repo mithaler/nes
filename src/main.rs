@@ -1,5 +1,23 @@
+extern crate clap;
+extern crate sdl2;
+
 use std::fs;
 use std::str;
+
+use clap::{App, Arg};
+use sdl2::{EventPump};
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::render::{Canvas, Texture, TextureAccess};
+use sdl2::video::Window;
+
+use crate::bus::Bus;
+use crate::common::{Clocked, shared, Shared};
+use crate::cpu::Cpu;
+use crate::mappers::mapper;
+use crate::memory::{CpuMem, Mem, PpuMem};
+use crate::ppu::Ppu;
 
 mod bus;
 mod cpu;
@@ -8,16 +26,16 @@ mod mappers;
 mod memory;
 mod ppu;
 
-extern crate clap;
+const WIDTH: u32 = 256;
+const HEIGHT: u32 = 240;
 
-use clap::{Arg, App};
-
-use crate::bus::{Bus};
-use crate::common::{Clocked, shared};
-use crate::cpu::Cpu;
-use crate::mappers::mapper;
-use crate::memory::{CpuMem, Mem, PpuMem};
-use crate::ppu::Ppu;
+struct Context<'a> {
+    canvas: Canvas<Window>,
+    cpu: Shared<Cpu>,
+    texture: Texture<'a>,
+    ppu: Ppu,
+    event_pump: EventPump
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = App::new("nes")
@@ -44,16 +62,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cpu_mem = Box::new(CpuMem::new(mapper, bus));
 
     let cpu = shared(Cpu::new(cpu_mem, matches.is_present("test_mode")));
-    let mut ppu = Ppu::new(ppu_mem.clone(), cpu.clone());
-    // TODO figure out pausing
-    loop {
-        for i in 0..=24 {
-            if i % 12 == 0 {
-                cpu.borrow_mut().tick();
-            }
-            if i % 4 == 0 {
-                ppu.tick();
+    let ppu = Ppu::new(ppu_mem.clone(), cpu.clone());
+
+    // Canvas setup
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+    let event_pump = sdl_context.event_pump()?;
+
+    let window = video_subsystem.window("NES", WIDTH, HEIGHT)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas().build()?;
+    let creator = canvas.texture_creator();
+    let texture = creator.create_texture(
+        PixelFormatEnum::RGB24,
+        TextureAccess::Streaming,
+        WIDTH, HEIGHT
+    )?;
+
+    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.clear();
+
+    let mut context = Context {event_pump, texture, cpu, ppu, canvas};
+
+    let mut odd_frame = false;
+    let mut running = true;
+    while running {
+        // number of PPU cycles
+        let cycle_count = match odd_frame {
+            true => 89340,
+            false => 89340 // ??
+        };
+        running = render_frame(&mut context, cycle_count);
+        odd_frame = !odd_frame;
+    }
+    Ok(())
+}
+
+fn render_frame(context: &mut Context, cycles: u32) -> bool {
+    for i in 0..=cycles {
+        for event in context.event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    return false;
+                },
+                _ => {}
             }
         }
+
+        if i % 12 == 0 {
+            context.cpu.borrow_mut().tick();
+        }
+        if i % 4 == 0 {
+            context.ppu.tick();
+        }
+
+        match context.canvas.copy(&context.texture, None, None) {
+            Ok(_) => {},
+            Err(e) => panic!(e)
+        }
     }
+    true
 }
