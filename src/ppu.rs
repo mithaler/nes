@@ -6,6 +6,7 @@ pub struct Ppu {
     mem: Shared<PpuMem>,
     cpu: Shared<Cpu>,
 
+    framebuffer: Vec<u8>,
     scanline: i16,  // -1 - 261
     tick: u16  // 0 - 340
 }
@@ -24,9 +25,14 @@ impl Ppu {
         Ppu {
             mem: ppu_mem,
             cpu,
+            framebuffer: Vec::with_capacity(256 * 240),
             scanline: -1,
             tick: 0,
         }
+    }
+
+    pub fn frame(&self) -> &[u8] {
+        self.framebuffer.as_slice()
     }
 
     fn pattern(&self, num: u8) -> Vec<Vec<u8>> {
@@ -191,6 +197,7 @@ mod tests {
     use super::Ppu;
     use crate::bus::Bus;
     use crate::common::{Addressable, Shared, shared};
+    use crate::controllers::Controllers;
     use crate::mappers::test_mapper;
     use crate::memory::{CpuMem, PpuMem};
     use crate::cpu::Cpu;
@@ -224,7 +231,7 @@ mod tests {
     fn test_ppu() -> (Shared<PpuMem>, Ppu) {
         let mapper = test_mapper(&[], test_pattern().as_slice());
         let ppu_mem = shared(PpuMem::new(mapper.clone()));
-        let bus = Bus::new(ppu_mem.clone());
+        let bus = Bus::new(ppu_mem.clone(), shared(Controllers::new()));
         let cpu = shared(Cpu::new(Box::new(CpuMem::new(mapper.clone(), bus)), true));
         (ppu_mem.clone(), Ppu::new(ppu_mem.clone(), cpu))
     }

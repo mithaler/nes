@@ -12,7 +12,6 @@ pub struct CpuMem {
     ram: Mem,
     mapper: Mapper,
     bus: CpuBus,
-    apu_registers: Mem,
 }
 
 pub fn initialized_mem(size: usize) -> Mem {
@@ -25,8 +24,7 @@ impl CpuMem {
         CpuMem {
             ram: initialized_mem(0x800),  // randomized on a real console
             mapper,
-            bus,
-            apu_registers: initialized_mem(0x18)
+            bus
         }
     }
 }
@@ -36,7 +34,7 @@ impl Addressable for CpuMem {
         match addr {
             0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize],
             0x2000 ... 0x3FFF => self.bus.borrow_mut().get(((addr - 0x2000) & 0x7) + 0x2000),
-            0x4000 ... 0x4017 => self.apu_registers[(addr - 0x4000) as usize],
+            0x4000 ... 0x4017 => self.bus.borrow_mut().get(addr),
             // 0x4018 ... 0x401F used only for internal testing
             0x4020 ... 0xFFFF => self.mapper.borrow().get_cpu_space(addr),
             _ => panic!()
@@ -47,7 +45,7 @@ impl Addressable for CpuMem {
         match addr {
             0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize] = value,
             0x2000 ... 0x3FFF => self.bus.borrow_mut().set(((addr - 0x2000) & 0x7) + 0x2000, value),
-            0x4000 ... 0x4017 => self.apu_registers[(addr - 0x4000) as usize] = value,
+            0x4000 ... 0x4017 => self.bus.borrow_mut().set(addr, value),
             // 0x4018 ... 0x401F used only for internal testing
             0x4020 ... 0xFFFF => self.mapper.borrow_mut().set_cpu_space(addr, value),
             _ => panic!()
@@ -153,12 +151,13 @@ mod tests {
         use super::TEST_MEM;
         use crate::bus::Bus;
         use crate::common::{Addressable, shared};
+        use crate::controllers::Controllers;
         use crate::memory::*;
         use crate::mappers::{Mapper, test_mapper};
 
         fn test_mem() -> (CpuMem, Mapper) {
             let mapper = test_mapper(TEST_MEM, &[]);
-            let bus = Bus::new(shared(PpuMem::new(mapper.clone())));
+            let bus = Bus::new(shared(PpuMem::new(mapper.clone())), shared(Controllers::new()));
             (CpuMem::new(mapper.clone(), bus), mapper.clone())
         }
 

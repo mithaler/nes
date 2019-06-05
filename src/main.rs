@@ -1,11 +1,12 @@
 extern crate clap;
 extern crate sdl2;
 
+use std::error::Error;
 use std::fs;
 use std::str;
 
 use clap::{App, Arg};
-use sdl2::{EventPump};
+use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
@@ -14,6 +15,7 @@ use sdl2::video::Window;
 
 use crate::bus::Bus;
 use crate::common::{Clocked, shared, Shared};
+use crate::controllers::Controllers;
 use crate::cpu::Cpu;
 use crate::mappers::mapper;
 use crate::memory::{CpuMem, Mem, PpuMem};
@@ -22,6 +24,7 @@ use crate::ppu::Ppu;
 mod bus;
 mod cpu;
 mod common;
+mod controllers;
 mod mappers;
 mod memory;
 mod ppu;
@@ -32,12 +35,13 @@ const HEIGHT: u32 = 240;
 struct Context<'a> {
     canvas: Canvas<Window>,
     cpu: Shared<Cpu>,
+    controllers: Shared<Controllers>,
     texture: Texture<'a>,
     ppu: Ppu,
     event_pump: EventPump
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<Error>> {
     let matches = App::new("nes")
         .version("0.1")
         .author("Michael Louis Thaler <michael.louis.thaler@gmail.com>")
@@ -56,9 +60,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (header, rom_sections) = rom.split_at(16);
     assert_eq!(str::from_utf8(&header[0..4]).unwrap(), "NES\u{1a}", "Not a NES ROM!");
 
+    let controllers = shared(Controllers::new());
     let mapper = mapper(header, rom_sections);
     let ppu_mem = shared(PpuMem::new(mapper.clone()));
-    let bus = Bus::new(ppu_mem.clone());
+    let bus = Bus::new(ppu_mem.clone(), controllers.clone());
     let cpu_mem = Box::new(CpuMem::new(mapper, bus));
 
     let cpu = shared(Cpu::new(cpu_mem, matches.is_present("test_mode")));
@@ -85,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     canvas.clear();
 
-    let mut context = Context {event_pump, texture, cpu, ppu, canvas};
+    let mut context = Context {event_pump, texture, cpu, ppu, controllers, canvas};
 
     let mut odd_frame = false;
     let mut running = true;
@@ -95,20 +100,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             true => 89340,
             false => 89340 // ??
         };
-        running = render_frame(&mut context, cycle_count);
+        running = render_frame(&mut context, cycle_count)?;
         odd_frame = !odd_frame;
     }
     Ok(())
 }
 
-fn render_frame(context: &mut Context, cycles: u32) -> bool {
+fn render_frame(context: &mut Context, cycles: u32) -> Result<bool, Box<Error>> {
     for i in 0..=cycles {
         for event in context.event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    return false;
-                },
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => return Ok(false),
+                Event::KeyDown { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
+                Event::KeyUp { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
                 _ => {}
             }
         }
@@ -119,11 +124,11 @@ fn render_frame(context: &mut Context, cycles: u32) -> bool {
         if i % 4 == 0 {
             context.ppu.tick();
         }
-
-        match context.canvas.copy(&context.texture, None, None) {
-            Ok(_) => {},
-            Err(e) => panic!(e)
-        }
     }
-    true
+
+    context.texture.update(None, context.ppu.frame(), WIDTH as usize)?;
+    context.canvas.copy(&context.texture, None, None)?;
+    context.canvas.present();
+
+    Ok(true)
 }

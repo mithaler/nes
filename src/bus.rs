@@ -1,4 +1,5 @@
 use crate::common::{Addressable, Shared, shared, join_bytes};
+use crate::controllers::Controllers;
 use crate::memory::PpuMem;
 
 enum AddressLatchStatus {
@@ -18,13 +19,15 @@ pub struct Bus {
     address_latch_status: AddressLatchStatus,
     last_written: u8,
     ppu_write_addr: u16,
-    ppu_mem: Shared<PpuMem>
+
+    ppu_mem: Shared<PpuMem>,
+    controllers: Shared<Controllers>
 }
 
 use AddressLatchStatus::*;
 
 impl Bus {
-    pub fn new(ppu_mem: Shared<PpuMem>) -> CpuBus {
+    pub fn new(ppu_mem: Shared<PpuMem>, controllers: Shared<Controllers>) -> CpuBus {
         shared(Bus {
             oamaddr: 0,
             oamdata: 0,
@@ -35,7 +38,9 @@ impl Bus {
             address_latch_status: Empty,
             last_written: 0,
             ppu_write_addr: 0,
-            ppu_mem
+
+            ppu_mem,
+            controllers
         })
     }
 
@@ -107,7 +112,11 @@ impl Bus {
             0x2006 => self.ppuaddr,
             0x2007 => self.get_ppudata(),
             0x2008 => self.oamdma,
-            _ => panic!("Bad bus addr: {:04X?}", register)
+
+            0x4016 => self.controllers.borrow_mut().report_controller_1(),
+            0x4017 => self.controllers.borrow_mut().report_controller_2(),
+
+            _ => { println!("Unimplemented register read: {:04X?}", register); 0},
         }
     }
 
@@ -123,7 +132,10 @@ impl Bus {
             0x2006 => self.set_ppuaddr(value),
             0x2007 => self.set_ppudata(value),
             0x2008 => self.set_oamdma(value),
-            _ => panic!("Bad bus addr: {:04X?}", register)
+
+            0x4016 => self.controllers.borrow_mut().set_polling(if value != 0 {true} else {false}),
+
+            _ => println!("Unimplemented register write: {:04X?} -> {:02X?}", register, value),
         }
     }
 }
