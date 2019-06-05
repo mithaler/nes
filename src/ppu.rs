@@ -95,20 +95,14 @@ impl Ppu {
     fn tile_colorset(&self, x: u8, y: u8) -> u8 {
         let mut attrs = self.mem.borrow().get(Ppu::tile_attr_addr(x, y));
         let addr = Ppu::nametable_addr(x, y);
-        let right = match addr & 0b0000_0000_0000_0011 {
-            0 | 1 => false,
-            2 | 3 => true,
-            _ => unreachable!()
-        };
-        let bottom = match addr & 0b0000_0000_0111_1111 {
-            0 ... 0x3F => false,
-            0x40 ... 0x7F => true,
-            _ => unreachable!()
-        };
-        if right {
+
+        // Which box inside the attribute byte is it?
+        // on the right?
+        if (addr & 0b0000_0000_0000_0011) > 1 {
             attrs >>= 2
         }
-        if bottom {
+        // on the bottom?
+        if (addr & 0b0000_0000_0111_1111) >= 0x40 {
             attrs >>= 4
         }
         attrs & 0b0000_0011
