@@ -45,7 +45,7 @@ impl Bus {
     }
 
     fn advance_write_addr(&mut self) {
-        match (self.ppu_mem.borrow().get_ppuctrl() & 0b0000_0100) == 1 {
+        match (self.ppu_mem.borrow().get_ppuctrl() & 0b0000_0100) != 0 {
             true => self.ppu_write_addr += 0x20,  // go down
             false => self.ppu_write_addr += 1  // go right
         }

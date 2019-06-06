@@ -22,11 +22,11 @@ impl Nrom {
     pub fn new(header: &[u8], rom_sections: &[u8]) -> Nrom {
         let prg_rom_size = header[4] as u16;
         let chr_rom_size = header[5] as u16;
-        let prg_ram = match (header[6] & 0b0000_0100) == 1 {
+        let prg_ram = match (header[6] & 0b0000_0100) != 0 {
             true => Some(initialized_mem(0x2000)),
             false => None,
         };
-        let nametable_mirror = match (header[6] & 0b0000_0001) == 1 {
+        let nametable_mirror = match (header[6] & 0b0000_0001) != 0 {
             true => NametableMirror::Vertical,
             false => NametableMirror::Horizontal
         };
