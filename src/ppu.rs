@@ -122,7 +122,14 @@ impl Ppu {
     }
 
     fn pattern(&self, num: u8) -> Vec<Vec<u8>> {
-        let pattern = self.mem.borrow().pattern(num);
+        let mem = self.mem.borrow();
+
+        let offset = if (mem.get_ppuctrl() & 0b0001_0000) != 0 {
+            0x1000
+        } else {
+            0
+        };
+        let pattern = self.mem.borrow().pattern(num, offset);
         let iter = pattern.0.iter().zip(pattern.1.iter());
 
         let mut ret: Vec<Vec<u8>> = Vec::with_capacity(8);
@@ -178,6 +185,9 @@ impl Ppu {
     /// Returns the memory address of a color by pixel value (0-3), palette number (0-3),
     /// and whether it's a background (true) or sprite (false) palette.
     fn color_addr(pixel_value: u8, palette_num: u8, background: bool) -> u16 {
+        if pixel_value == 0 {
+            return 0x3F00;
+        }
         let mut out = 0;
         out |= pixel_value;
         out |= palette_num << 2;
@@ -257,7 +267,7 @@ impl Ppu {
     fn render_background_pixel(&mut self) {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
-        let pixel = tile.pattern[(self.tick % 8) as usize][(self.scanline % 8) as usize];
+        let pixel = tile.pattern[(self.scanline % 8) as usize][(self.tick % 8) as usize];
         let color = color(self.mem.borrow().get(Ppu::color_addr(pixel, tile.palette, false)));
         self.framebuffer[self.framebuffer_index] = color.0;
         self.framebuffer[self.framebuffer_index + 1] = color.1;
