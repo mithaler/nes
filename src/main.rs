@@ -96,18 +96,18 @@ fn main() -> Result<(), Box<Error>> {
     let mut running = true;
     while running {
         // number of PPU cycles
-        let cycle_count = match odd_frame {
-            true => 89340,
-            false => 89340 // ??
+        let ppu_cycle_count = match odd_frame {
+            true => 89342,
+            false => 89342 // ??
         };
-        running = render_frame(&mut context, cycle_count)?;
+        running = render_frame(&mut context, ppu_cycle_count)?;
         odd_frame = !odd_frame;
     }
     Ok(())
 }
 
-fn render_frame(context: &mut Context, cycles: u32) -> Result<bool, Box<Error>> {
-    for i in 0..=cycles {
+fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<bool, Box<Error>> {
+    for i in 0..ppu_cycles {
         for event in context.event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -118,15 +118,13 @@ fn render_frame(context: &mut Context, cycles: u32) -> Result<bool, Box<Error>> 
             }
         }
 
-        if i % 12 == 0 {
+        if (i % 3) == 0 {
             context.cpu.borrow_mut().tick();
         }
-        if i % 4 == 0 {
-            context.ppu.tick();
-        }
+        context.ppu.tick();
     }
 
-    context.texture.update(None, context.ppu.frame(), WIDTH as usize)?;
+    context.texture.update(None, context.ppu.frame(), (WIDTH * 3) as usize)?;
     context.canvas.copy(&context.texture, None, None)?;
     context.canvas.present();
 

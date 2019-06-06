@@ -6,7 +6,9 @@ pub struct Ppu {
     mem: Shared<PpuMem>,
     cpu: Shared<Cpu>,
 
-    framebuffer: Vec<u8>,
+    tile: Option<Tile>,
+    framebuffer_index: usize,
+    framebuffer: [u8; (256 * 240 * 3)],
     scanline: i16,  // -1 - 261
     tick: u16  // 0 - 340
 }
@@ -19,20 +21,104 @@ struct Tile {
     y: u8,
 }
 
+// R, G, B
+type Color = (u8, u8, u8);
+
+// http://www.firebrandx.com/nespalette.html
+const COLORS: [Color; 64] = [
+    // 0x
+    (0x6a, 0x6d, 0x6a),
+    (0x00, 0x13, 0x80),
+    (0x1e, 0x00, 0x8a),
+    (0x39, 0x00, 0x7a),
+    (0x55, 0x00, 0x56),
+    (0x5a, 0x00, 0x18),
+    (0x4f, 0x10, 0x00),
+    (0x3d, 0x1c, 0x00),
+    (0x25, 0x32, 0x00),
+    (0x00, 0x3d, 0x00),
+    (0x00, 0x40, 0x00),
+    (0x00, 0x39, 0x24),
+    (0x00, 0x2e, 0x55),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+
+    // 1x
+    (0xb9, 0xbc, 0xb9),
+    (0x18, 0x50, 0xc7),
+    (0x4b, 0x30, 0xe3),
+    (0x73, 0x22, 0xd6),
+    (0x95, 0x1f, 0xa9),
+    (0x9d, 0x28, 0x5c),
+    (0x98, 0x37, 0x00),
+    (0x7f, 0x4c, 0x00),
+    (0x5e, 0x64, 0x00),
+    (0x22, 0x77, 0x00),
+    (0x02, 0x7e, 0x02),
+    (0x00, 0x76, 0x45),
+    (0x00, 0x6e, 0x8a),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+
+    // 2x
+    (0xff, 0xff, 0xff),
+    (0x68, 0xa6, 0xff),
+    (0x8c, 0x9c, 0xff),
+    (0xb5, 0x86, 0xff),
+    (0xd9, 0x75, 0xfd),
+    (0xe3, 0x77, 0xb9),
+    (0xe5, 0x8d, 0x68),
+    (0xd4, 0x9d, 0x29),
+    (0xb3, 0xaf, 0x0c),
+    (0x7b, 0xc2, 0x11),
+    (0x55, 0xca, 0x47),
+    (0x46, 0xcb, 0x81),
+    (0x47, 0xc1, 0xc5),
+    (0x4a, 0x4d, 0x4a),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+
+    // 3x
+    (0xff, 0xff, 0xff),
+    (0xcc, 0xea, 0xff),
+    (0xdd, 0xde, 0xff),
+    (0xec, 0xda, 0xff),
+    (0xf8, 0xd7, 0xfe),
+    (0xfc, 0xd6, 0xf5),
+    (0xfd, 0xdb, 0xcf),
+    (0xf9, 0xe7, 0xb5),
+    (0xf1, 0xf0, 0xaa),
+    (0xda, 0xfa, 0xa9),
+    (0xc9, 0xff, 0xbc),
+    (0xc3, 0xfb, 0xd7),
+    (0xc4, 0xf6, 0xf6),
+    (0xbe, 0xc1, 0xbe),
+    (0x00, 0x00, 0x00),
+    (0x00, 0x00, 0x00),
+];
+
+fn color(id: u8) -> &'static Color {
+    &COLORS[id as usize]
+}
+
 impl Ppu {
     pub fn new(ppu_mem: Shared<PpuMem>, cpu: Shared<Cpu>) -> Ppu {
         // startup state: https://wiki.nesdev.com/w/index.php/PPU_power_up_state
         Ppu {
             mem: ppu_mem,
             cpu,
-            framebuffer: Vec::with_capacity(256 * 240),
+            tile: None,
+            framebuffer_index: 0,
+            framebuffer: [0; (256 * 240 * 3)],  // 3 bytes per pixel
             scanline: -1,
             tick: 0,
         }
     }
 
     pub fn frame(&self) -> &[u8] {
-        self.framebuffer.as_slice()
+        &self.framebuffer
     }
 
     fn pattern(&self, num: u8) -> Vec<Vec<u8>> {
@@ -126,11 +212,15 @@ impl Ppu {
         attrs & 0b0000_0011
     }
 
-    fn tile(&self, x: u8, y: u8) -> Box<Tile> {
+    fn curr_tile_coordinates(&self) -> (u8, u8) {
+        ((self.tick / 8) as u8, (self.scanline / 8) as u8)
+    }
+
+    fn tile(&self, x: u8, y: u8) -> Tile {
         let num = self.tile_pattern_num(x, y);
         let palette = self.tile_colorset(x, y);
         let pattern = self.pattern(num);
-        Box::new(Tile {x, y, num, pattern, palette})
+        Tile {x, y, num, pattern, palette}
     }
 
     fn dummy_scanline(&mut self) {
@@ -139,6 +229,7 @@ impl Ppu {
             println!("-- EXITING VBLANK --");
             self.mem.borrow_mut().set_vblank(false);  // TODO sprite 0 hit, overflow
         }
+        self.framebuffer_index = 0;
     }
 
     fn vblank_scanline(&mut self) {
@@ -151,10 +242,42 @@ impl Ppu {
         }
     }
 
+    fn update_tile(&mut self) {
+        let (x, y) = self.curr_tile_coordinates();
+        match &self.tile {
+            None => self.tile = Some(self.tile(x, y)),
+            Some(t) => {
+                if t.x != x || t.y != y {
+                    self.tile = Some(self.tile(x, y))
+                }
+            }
+        }
+    }
+
+    fn render_background_pixel(&mut self) {
+        self.update_tile();
+        let tile = self.tile.as_ref().unwrap();
+        let pixel = tile.pattern[(self.tick % 8) as usize][(self.scanline % 8) as usize];
+        let color = color(self.mem.borrow().get(Ppu::color_addr(pixel, tile.palette, false)));
+        self.framebuffer[self.framebuffer_index] = color.0;
+        self.framebuffer[self.framebuffer_index + 1] = color.1;
+        self.framebuffer[self.framebuffer_index + 2] = color.2;
+        self.framebuffer_index += 3;
+    }
+
+    fn render_background(&mut self) {
+        match self.tick {
+            0 => {},
+            1 ... 256 => self.render_background_pixel(),
+            _ => {},
+
+        }
+    }
+
     fn visible_scanline(&mut self) {
         let ppumask = self.mem.borrow().get_ppumask();
         if (ppumask & 0b00001000) != 0 {
-            //self.render_background();
+            self.render_background();
         }
         if (ppumask & 0b00010000) != 0 {
             //self.render_sprite();
@@ -163,7 +286,6 @@ impl Ppu {
     }
 
     fn render(&mut self) {
-        //println!("Scanline {:?}, Tick {:?}", self.scanline, self.tick);
         match self.scanline {
             -1 => self.dummy_scanline(),
             0 ... 239 => self.visible_scanline(),
@@ -172,8 +294,8 @@ impl Ppu {
             _ => unreachable!()
         }
         self.tick = match self.tick {
-            t @ 0 ... 340 => t + 1,
-            341 => {
+            t @ 0 ... 339 => t + 1,
+            340 => {
                 self.scanline = match self.scanline {
                     s @ -1 ... 259 => s + 1,
                     260 => -1,
