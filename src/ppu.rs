@@ -204,11 +204,19 @@ impl Ppu {
         self.mem.borrow().get(addr)
     }
 
-    /// Given the coordinates of a tile in the nametable, returns a tuple containing
-    /// the three colors of its palette.
     fn tile_colorset(&self, x: u8, y: u8) -> [&'static Color; 4] {
+        let palette_base_addr = self.tile_colorset_base_addr(x, y);
         let mem = self.mem.borrow();
-        let mut attrs = mem.get(Ppu::tile_attr_addr(x, y));
+        [color(mem.get(0x3F00)),  // BG color
+         color(mem.get(palette_base_addr)),  // palette color 1
+         color(mem.get(palette_base_addr + 1)),  // palette color 2
+         color(mem.get(palette_base_addr + 2))]  // palette color 3
+    }
+
+    /// Given the coordinates of a tile in the nametable, returns the address of
+    /// the first color in its palette.
+    fn tile_colorset_base_addr(&self, x: u8, y: u8) -> u16 {
+        let mut attrs = self.mem.borrow().get(Ppu::tile_attr_addr(x, y));
         let addr = Ppu::nametable_addr(x, y);
 
         // Which box inside the attribute byte is it?
@@ -220,11 +228,7 @@ impl Ppu {
         if (addr & 0b0000_0000_0111_1111) >= 0x40 {
             attrs >>= 4
         }
-        let palette_base_addr: u16 = (0x3F00 | (((attrs & 0b0000_0011) as u16) << 2)) + 1;
-        [color(mem.get(0x3F00)),
-         color(mem.get(palette_base_addr)),
-         color(mem.get(palette_base_addr + 1)),
-         color(mem.get(palette_base_addr + 2))]
+        0x3F01 | (((attrs & 0b0000_0011) as u16) << 2)
     }
 
     fn curr_tile_coordinates(&self) -> (u8, u8) {
@@ -357,10 +361,10 @@ mod tests {
         let mut chr_rom: Vec<u8> = vec![0; 0x2000];
 
         // tile 1, not 0 (test offset)
-        chr_rom.splice(0x8..0xF, LEFT.iter().cloned());
-        chr_rom.splice(0x1008..0x100F, RIGHT.iter().cloned());
-        assert_eq!(LEFT, &chr_rom[0x8..0x10]);
-        assert_eq!(RIGHT, &chr_rom[0x1008..0x1010]);
+        chr_rom.splice(0x10..0x18, LEFT.iter().cloned());
+        chr_rom.splice(0x18..0x1F, RIGHT.iter().cloned());
+        assert_eq!(&chr_rom[0x10..0x18], LEFT);
+        assert_eq!(&chr_rom[0x18..0x20], RIGHT);
 
         Box::new(chr_rom)
     }
@@ -420,35 +424,35 @@ mod tests {
 
         let mut pattern_num = test_ppu.tile_pattern_num(0, 0);
         assert_eq!(pattern_num, 0xAE);
-        let mut pattern_attr_addr = test_ppu.tile_colorset(0, 0);
-        assert_eq!(pattern_attr_addr, 3);
+        let mut pattern_attr_addr = test_ppu.tile_colorset_base_addr(0, 0);
+        assert_eq!(pattern_attr_addr, 0x3F0D);
 
         pattern_num = test_ppu.tile_pattern_num(40, 0);
         assert_eq!(pattern_num, 0xBC);
-        pattern_attr_addr = test_ppu.tile_colorset(40, 0);
-        assert_eq!(pattern_attr_addr, 3);
+        pattern_attr_addr = test_ppu.tile_colorset_base_addr(40, 0);
+        assert_eq!(pattern_attr_addr, 0x3F0D);
 
         pattern_num = test_ppu.tile_pattern_num(10, 39);
         assert_eq!(pattern_num, 0x1F);
-        pattern_attr_addr = test_ppu.tile_colorset(10, 39);
-        assert_eq!(pattern_attr_addr, 1);
+        pattern_attr_addr = test_ppu.tile_colorset_base_addr(10, 39);
+        assert_eq!(pattern_attr_addr, 0x3F05);
 
         // count through all the tiles under $A7 in (0, 0)
-        assert_eq!(test_ppu.tile_colorset(0, 0), 3);
-        assert_eq!(test_ppu.tile_colorset(1, 0), 3);
-        assert_eq!(test_ppu.tile_colorset(2, 0), 1);
-        assert_eq!(test_ppu.tile_colorset(3, 0), 1);
-        assert_eq!(test_ppu.tile_colorset(0, 1), 3);
-        assert_eq!(test_ppu.tile_colorset(1, 1), 3);
-        assert_eq!(test_ppu.tile_colorset(2, 1), 1);
-        assert_eq!(test_ppu.tile_colorset(3, 1), 1);
-        assert_eq!(test_ppu.tile_colorset(0, 2), 2);
-        assert_eq!(test_ppu.tile_colorset(1, 2), 2);
-        assert_eq!(test_ppu.tile_colorset(2, 2), 2);
-        assert_eq!(test_ppu.tile_colorset(3, 2), 2);
-        assert_eq!(test_ppu.tile_colorset(0, 3), 2);
-        assert_eq!(test_ppu.tile_colorset(1, 3), 2);
-        assert_eq!(test_ppu.tile_colorset(2, 3), 2);
-        assert_eq!(test_ppu.tile_colorset(3, 3), 2);
+        assert_eq!(test_ppu.tile_colorset_base_addr(0, 0), 0x3F0D);
+        assert_eq!(test_ppu.tile_colorset_base_addr(1, 0), 0x3F0D);
+        assert_eq!(test_ppu.tile_colorset_base_addr(2, 0), 0x3F05);
+        assert_eq!(test_ppu.tile_colorset_base_addr(3, 0), 0x3F05);
+        assert_eq!(test_ppu.tile_colorset_base_addr(0, 1), 0x3F0D);
+        assert_eq!(test_ppu.tile_colorset_base_addr(1, 1), 0x3F0D);
+        assert_eq!(test_ppu.tile_colorset_base_addr(2, 1), 0x3F05);
+        assert_eq!(test_ppu.tile_colorset_base_addr(3, 1), 0x3F05);
+        assert_eq!(test_ppu.tile_colorset_base_addr(0, 2), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(1, 2), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(2, 2), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(3, 2), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(0, 3), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(1, 3), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(2, 3), 0x3F09);
+        assert_eq!(test_ppu.tile_colorset_base_addr(3, 3), 0x3F09);
     }
 }
