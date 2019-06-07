@@ -13,14 +13,6 @@ pub struct Ppu {
     tick: u16  // 0 - 340
 }
 
-struct Tile {
-    pattern: Vec<Vec<u8>>,
-    palette: u8,
-    num: u8,
-    x: u8,
-    y: u8,
-}
-
 // R, G, B
 type Color = (u8, u8, u8);
 
@@ -98,6 +90,14 @@ const COLORS: [Color; 64] = [
     (0x00, 0x00, 0x00),
     (0x00, 0x00, 0x00),
 ];
+
+struct Tile {
+    pattern: Vec<Vec<u8>>,
+    palette: [&'static Color; 4],
+    num: u8,
+    x: u8,
+    y: u8,
+}
 
 fn color(id: u8) -> &'static Color {
     &COLORS[id as usize]
@@ -204,10 +204,11 @@ impl Ppu {
         self.mem.borrow().get(addr)
     }
 
-    /// Given the coordinates of a tile in the nametable, returns the colorset number of the
-    /// tile (from 0 to 3).
-    fn tile_colorset(&self, x: u8, y: u8) -> u8 {
-        let mut attrs = self.mem.borrow().get(Ppu::tile_attr_addr(x, y));
+    /// Given the coordinates of a tile in the nametable, returns a tuple containing
+    /// the three colors of its palette.
+    fn tile_colorset(&self, x: u8, y: u8) -> [&'static Color; 4] {
+        let mem = self.mem.borrow();
+        let mut attrs = mem.get(Ppu::tile_attr_addr(x, y));
         let addr = Ppu::nametable_addr(x, y);
 
         // Which box inside the attribute byte is it?
@@ -219,7 +220,11 @@ impl Ppu {
         if (addr & 0b0000_0000_0111_1111) >= 0x40 {
             attrs >>= 4
         }
-        attrs & 0b0000_0011
+        let palette_base_addr: u16 = (0x3F00 | (((attrs & 0b0000_0011) as u16) << 2)) + 1;
+        [color(mem.get(0x3F00)),
+         color(mem.get(palette_base_addr)),
+         color(mem.get(palette_base_addr + 1)),
+         color(mem.get(palette_base_addr + 2))]
     }
 
     fn curr_tile_coordinates(&self) -> (u8, u8) {
@@ -268,7 +273,7 @@ impl Ppu {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
         let pixel = tile.pattern[(self.scanline % 8) as usize][(self.tick % 8) as usize];
-        let color = color(self.mem.borrow().get(Ppu::color_addr(pixel, tile.palette, false)));
+        let color = tile.palette[pixel as usize];
         self.framebuffer[self.framebuffer_index] = color.0;
         self.framebuffer[self.framebuffer_index + 1] = color.1;
         self.framebuffer[self.framebuffer_index + 2] = color.2;
