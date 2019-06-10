@@ -14,7 +14,6 @@ pub struct Bus {
     oamdata: u8,  // $2004
     ppuscroll: u8,  // $2005
     ppuaddr: u8,  // $2006
-    oamdma: u8,  // $2008
 
     address_latch_status: AddressLatchStatus,
     last_written: u8,
@@ -33,7 +32,6 @@ impl Bus {
             oamdata: 0,
             ppuscroll: 0,
             ppuaddr: 0,
-            oamdma: 0,
 
             address_latch_status: Empty,
             last_written: 0,
@@ -45,7 +43,7 @@ impl Bus {
     }
 
     fn advance_write_addr(&mut self) {
-        match (self.ppu_mem.borrow().get_ppuctrl() & 0b0000_0100) != 0 {
+        match self.ppu_mem.borrow().get_ppuctrl().addr_increment_down {
             true => self.ppu_write_addr += 0x20,  // go down
             false => self.ppu_write_addr += 1  // go right
         }
@@ -97,8 +95,9 @@ impl Bus {
         self.advance_write_addr();
     }
 
-    fn set_oamdma(&mut self, value: u8) {
-        self.oamdma = value;
+    /// Special CPU operation that writes directly to PPU OAM memory.
+    pub fn set_oamdma(&mut self, oam_page: &[u8]) {
+        self.ppu_mem.borrow_mut().set_oamdma(oam_page);
     }
 
     pub fn get(&mut self, register: u16) -> u8 {
@@ -111,7 +110,6 @@ impl Bus {
             0x2005 => self.ppuscroll,
             0x2006 => self.ppuaddr,
             0x2007 => self.get_ppudata(),
-            0x2008 => self.oamdma,
 
             0x4016 => self.controllers.borrow_mut().report_controller_1(),
             0x4017 => self.controllers.borrow_mut().report_controller_2(),
@@ -131,8 +129,8 @@ impl Bus {
             0x2005 => self.set_ppuscroll(value),
             0x2006 => self.set_ppuaddr(value),
             0x2007 => self.set_ppudata(value),
-            0x2008 => self.set_oamdma(value),
 
+            0x4014 => panic!("Don't write to $4014, call set_oamdma instead!"),
             0x4016 => self.controllers.borrow_mut().set_polling(if value != 0 {true} else {false}),
 
             _ => println!("Unimplemented register write: {:04X?} -> {:02X?}", register, value),

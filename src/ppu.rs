@@ -7,6 +7,7 @@ pub struct Ppu {
     cpu: Shared<Cpu>,
 
     tile: Option<Tile>,
+    sprites: Box<Vec<Sprite>>,
     framebuffer_index: usize,
     framebuffer: [u8; (256 * 240 * 3)],
     scanline: i16,  // -1 - 261
@@ -15,6 +16,7 @@ pub struct Ppu {
 
 // R, G, B
 type Color = (u8, u8, u8);
+type Palette = [&'static Color; 4];
 
 // http://www.firebrandx.com/nespalette.html
 const COLORS: [Color; 64] = [
@@ -91,12 +93,22 @@ const COLORS: [Color; 64] = [
     (0x00, 0x00, 0x00),
 ];
 
+#[derive(Debug)]
 struct Tile {
     pattern: Vec<Vec<u8>>,
-    palette: [&'static Color; 4],
+    palette: Palette,
     num: u8,
     x: u8,
     y: u8,
+}
+
+#[derive(Debug)]
+struct Sprite {
+    pattern: Vec<Vec<u8>>,
+    palette: Palette,
+    x: u8,
+    y: u8,
+    behind_background: bool,
 }
 
 fn color(id: u8) -> &'static Color {
@@ -110,6 +122,7 @@ impl Ppu {
             mem: ppu_mem,
             cpu,
             tile: None,
+            sprites: Box::new(vec!()),
             framebuffer_index: 0,
             framebuffer: [0; (256 * 240 * 3)],  // 3 bytes per pixel
             scanline: -1,
@@ -121,15 +134,10 @@ impl Ppu {
         &self.framebuffer
     }
 
-    fn pattern(&self, num: u8) -> Vec<Vec<u8>> {
-        let mem = self.mem.borrow();
-
-        let offset = if (mem.get_ppuctrl() & 0b0001_0000) != 0 {
-            0x1000
-        } else {
-            0
-        };
-        let pattern = self.mem.borrow().pattern(num, offset);
+    // TODO optimization: since we're not caching these from scanline to scanline, we only need
+    // one row of these at a time, so we don't have to return and store all 8.
+    fn pattern(&self, num: u8, base_addr: u16, horizontal_flip: bool, vertical_flip: bool) -> Vec<Vec<u8>> {
+        let pattern = self.mem.borrow().pattern(num, base_addr);
         let iter = pattern.0.iter().zip(pattern.1.iter());
 
         let mut ret: Vec<Vec<u8>> = Vec::with_capacity(8);
@@ -147,7 +155,15 @@ impl Ppu {
                 row.push(out);
                 bitmask >>= 1;
             }
+            if horizontal_flip {
+                // optimization: read backwards instead
+                row.reverse();
+            }
             ret.push(row);
+        }
+        if vertical_flip {
+            // optimization: read backwards instead
+            ret.reverse();
         }
         ret
     }
@@ -182,21 +198,6 @@ impl Ppu {
         base + (x_within / 4) + ((y_within / 4) * 0x8)
     }
 
-    /// Returns the memory address of a color by pixel value (0-3), palette number (0-3),
-    /// and whether it's a background (true) or sprite (false) palette.
-    fn color_addr(pixel_value: u8, palette_num: u8, background: bool) -> u16 {
-        if pixel_value == 0 {
-            return 0x3F00;
-        }
-        let mut out = 0;
-        out |= pixel_value;
-        out |= palette_num << 2;
-        if !background {
-            out |= 0b0001_0000;
-        }
-        0x3F00 | (out as u16)
-    }
-
     /// Given the coordinates of a tile in the nametable, returns the byte representing the
     /// tile in the nametable.
     fn tile_pattern_num(&self, x: u8, y: u8) -> u8 {
@@ -204,13 +205,22 @@ impl Ppu {
         self.mem.borrow().get(addr)
     }
 
-    fn tile_colorset(&self, x: u8, y: u8) -> [&'static Color; 4] {
-        let palette_base_addr = self.tile_colorset_base_addr(x, y);
+    fn colorset(&self, base_addr: u16) -> Palette {
         let mem = self.mem.borrow();
         [color(mem.get(0x3F00)),  // BG color
-         color(mem.get(palette_base_addr)),  // palette color 1
-         color(mem.get(palette_base_addr + 1)),  // palette color 2
-         color(mem.get(palette_base_addr + 2))]  // palette color 3
+         color(mem.get(base_addr)),  // palette color 1
+         color(mem.get(base_addr + 1)),  // palette color 2
+         color(mem.get(base_addr + 2))]  // palette color 3
+    }
+
+    fn tile_colorset(&self, x: u8, y: u8) -> Palette {
+        let palette_base_addr = self.tile_colorset_base_addr(x, y);
+        self.colorset(palette_base_addr)
+    }
+
+    fn sprite_colorset(&self, palette_num: u8) -> Palette {
+        let base_addr = 0b0011_1111_0001_0001 + (u16::from(palette_num) << 2);
+        self.colorset(base_addr)
     }
 
     /// Given the coordinates of a tile in the nametable, returns the address of
@@ -236,10 +246,58 @@ impl Ppu {
     }
 
     fn tile(&self, x: u8, y: u8) -> Tile {
+        let background_table_addr = { self.mem.borrow().get_ppuctrl().background_table_addr };
         let num = self.tile_pattern_num(x, y);
         let palette = self.tile_colorset(x, y);
-        let pattern = self.pattern(num);
+        let pattern = self.pattern(num, background_table_addr, false, false);
         Tile {x, y, num, pattern, palette}
+    }
+
+    fn scanline_sprites(&self) -> Box<Vec<Sprite>> {
+        let mem = self.mem.borrow();
+        let ppuctrl = mem.get_ppuctrl();
+        let large = ppuctrl.sprite_size_large;
+        if large {
+            unimplemented!("8x16 sprites");
+        }
+        let oam = mem.borrow_oam();
+
+        let mut out = Box::new(Vec::with_capacity(8));
+        let scanline = self.scanline as u16;  // safe, only called on rendering scanlines
+        for sprite in 0..=63 {
+            let y = oam[4 * sprite] as u16;
+            if scanline >= y && scanline < y + 8 {
+                let (index, attrs, x) = (
+                    oam[4 * sprite + 1],
+                    oam[4 * sprite + 2],
+                    oam[4 * sprite + 3]
+                );
+
+                let palette_num = attrs & 0b0000_0011;
+                let behind_background = (attrs & 0b0010_0000) != 0;
+                let horizontal_flip = (attrs & 0b0100_0000) != 0;
+                let vertical_flip = (attrs & 0b1000_0000) != 0;
+
+                let palette = self.sprite_colorset(palette_num);
+
+                let (num, tile_base_addr) = match large {
+                    true => (index >> 1, if (index & 1) != 0 { 0x1000 } else { 0x0 }),
+                    false => (index, ppuctrl.sprite_table_addr)
+                };
+                let pattern = self.pattern(num, tile_base_addr, horizontal_flip, vertical_flip);
+                out.push(Sprite {
+                    pattern,
+                    x,
+                    y: y as u8,
+                    behind_background,
+                    palette
+                });
+                if out.len() == 8 {
+                    break;
+                }
+            }
+        }
+        out
     }
 
     fn dummy_scanline(&mut self) {
@@ -255,7 +313,7 @@ impl Ppu {
         if self.scanline == 241 && self.tick == 1 {
             println!("-- ENTERING VBLANK --");
             self.mem.borrow_mut().set_vblank(true);
-            if (self.mem.borrow().get_ppuctrl() & 0b1000_0000) != 0 {
+            if self.mem.borrow().get_ppuctrl().send_nmi {
                 self.cpu.borrow_mut().nmi();
             }
         }
@@ -273,35 +331,47 @@ impl Ppu {
         }
     }
 
-    fn render_background_pixel(&mut self) {
+    fn render_background_pixel(&mut self) -> &'static Color {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
         let pixel = tile.pattern[(self.scanline % 8) as usize][(self.tick % 8) as usize];
-        let color = tile.palette[pixel as usize];
-        self.framebuffer[self.framebuffer_index] = color.0;
-        self.framebuffer[self.framebuffer_index + 1] = color.1;
-        self.framebuffer[self.framebuffer_index + 2] = color.2;
-        self.framebuffer_index += 3;
+        tile.palette[pixel as usize]
     }
 
-    fn render_background(&mut self) {
-        match self.tick {
-            0 => {},
-            1 ... 256 => self.render_background_pixel(),
-            _ => {},
-
+    fn render_sprite_pixel(&self) -> Option<&'static Color> {
+        for sprite in self.sprites.iter() {
+            let mut x = u16::from(sprite.x);
+            if self.tick >= x && self.tick < x + 8 {
+                let y = self.scanline - (sprite.y as i16);
+                x = self.tick - x;
+                let pixel = sprite.pattern[y as usize][x as usize];
+                return Some(sprite.palette[pixel as usize]);
+            }
         }
+        None
     }
 
     fn visible_scanline(&mut self) {
         let ppumask = self.mem.borrow().get_ppumask();
-        if (ppumask & 0b00001000) != 0 {
-            self.render_background();
+        let mut bg_color: Option<&'static Color> = None;
+        let mut sprite_color: Option<&'static Color> = None;
+        if self.tick == 0 {
+            self.sprites = self.scanline_sprites();
+        } else if (1..=256).contains(&self.tick) {
+            if (ppumask & 0b00001000) != 0 {
+                bg_color = Some(self.render_background_pixel());
+            }
+            if (ppumask & 0b00010000) != 0 {
+                sprite_color = self.render_sprite_pixel();
+            }
+            let color = sprite_color
+                .or(bg_color)
+                .unwrap_or_else(|| color(self.mem.borrow().get(0x3F00)));
+            self.framebuffer[self.framebuffer_index] = color.0;
+            self.framebuffer[self.framebuffer_index + 1] = color.1;
+            self.framebuffer[self.framebuffer_index + 2] = color.2;
+            self.framebuffer_index += 3;
         }
-        if (ppumask & 0b00010000) != 0 {
-            //self.render_sprite();
-        }
-        // TODO sprite priority?
     }
 
     fn render(&mut self) {
@@ -390,7 +460,7 @@ mod tests {
     #[test]
     fn test_pattern_overlay() {
         let (_ppumem, test_ppu) = test_ppu();
-        let tile = test_ppu.pattern(1);
+        let tile = test_ppu.pattern(1, 0, false, false);
         assert_eq!(tile.len(), 8);
         for (idx, row) in tile.iter().enumerate() {
             assert_eq!(row.as_slice(), TILE[idx]);

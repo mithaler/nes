@@ -11,7 +11,7 @@ pub fn mem(slice: &[u8]) -> Mem {
 pub struct CpuMem {
     ram: Mem,
     mapper: Mapper,
-    bus: CpuBus,
+    pub bus: CpuBus,
 }
 
 pub fn initialized_mem(size: usize) -> Mem {
@@ -25,6 +25,17 @@ impl CpuMem {
             ram: initialized_mem(0x800),  // randomized on a real console
             mapper,
             bus
+        }
+    }
+}
+
+impl CpuMem {
+    pub fn get_page(&self, start_addr: u16) -> &[u8] {
+        let addr = start_addr as usize;
+        match start_addr {
+            0 ... 0x1F00 => &self.ram[addr..addr+256],
+            //0x4020 ... 0xFFFF => self.mapper.borrow().get_cpu_page(start_addr),
+            _ => panic!("Weird start address for page read: {:04X?}", addr)
         }
     }
 }
@@ -53,14 +64,50 @@ impl Addressable for CpuMem {
     }
 }
 
+#[derive(Debug)]
+pub struct PpuCtrl {
+    pub base_nametable_addr: u16,
+    pub addr_increment_down: bool,
+    pub sprite_table_addr: u16,
+    pub background_table_addr: u16,
+    pub sprite_size_large: bool,  // if false, 8x8; if true, 8x16
+    pub send_nmi: bool
+}
+
+impl PpuCtrl {
+    fn from_register(value: u8) -> PpuCtrl {
+        let base_nametable_addr = match value & 0b0000_0011 {
+            0 => 0x2000,
+            1 => 0x2400,
+            2 => 0x2800,
+            3 => 0x2C00,
+            _ => unreachable!()
+        };
+        let addr_increment_down = if (value & 0b0000_0100) != 0 { true } else { false };
+        let sprite_table_addr = if (value & 0b0000_1000) != 0 { 0x1000 } else { 0x0000 };
+        let background_table_addr = if (value & 0b0001_0000) != 0 { 0x1000 } else { 0x0000 };
+        let sprite_size_large = if (value & 0b0010_0000) != 0 { true } else { false };
+        let send_nmi = if (value & 0b1000_0000) != 0 { true } else { false };
+        PpuCtrl {
+            base_nametable_addr,
+            addr_increment_down,
+            sprite_table_addr,
+            background_table_addr,
+            sprite_size_large,
+            send_nmi
+        }
+    }
+}
+
 // https://wiki.nesdev.com/w/index.php/PPU_memory_map
 pub struct PpuMem {
     mapper: Mapper,
     palette_ram: Mem,
     oam: Mem,
 
-    ppuctrl: u8,
+    ppuctrl: PpuCtrl,
     ppumask: u8,
+    oamaddr: u8,
     vblank: bool,
 }
 
@@ -73,8 +120,9 @@ impl PpuMem {
             palette_ram: initialized_mem(0x20),
             oam: initialized_mem(0x100),
 
-            ppuctrl: 0,
+            ppuctrl: PpuCtrl::from_register(0),
             ppumask: 0,
+            oamaddr: 0,
             vblank: false,
         }
     }
@@ -94,16 +142,20 @@ impl PpuMem {
         (first, second)
     }
 
+    pub fn borrow_oam(&self) -> &Mem {
+        &self.oam
+    }
+
     pub fn set_vblank(&mut self, vblank: bool) {
         self.vblank = vblank;
     }
 
-    pub fn get_ppuctrl(&self) -> u8 {
-        self.ppuctrl
+    pub fn get_ppuctrl(&self) -> &PpuCtrl {
+        &self.ppuctrl
     }
 
     pub fn set_ppuctrl(&mut self, ppuctrl: u8) {
-        self.ppuctrl = ppuctrl;
+        self.ppuctrl = PpuCtrl::from_register(ppuctrl);
     }
 
     pub fn set_ppumask(&mut self, ppumask: u8) {
@@ -112,6 +164,10 @@ impl PpuMem {
 
     pub fn get_ppumask(&self) -> u8 {
         self.ppumask
+    }
+
+    pub fn set_oamdma(&mut self, mem: &[u8]) {
+        self.oam.splice(.., mem.iter().cloned());
     }
 
     /// Returns the first 3 bits of PPUSTATUS; the latter 5 are remembered by the bus.

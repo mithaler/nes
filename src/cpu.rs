@@ -368,7 +368,7 @@ pub struct Cpu {
     s: u8, // stack
     p: u8, // flags
 
-    remaining_pause: u8,
+    remaining_pause: u16,
     instruction_counter: u64,
 }
 
@@ -466,7 +466,7 @@ impl Cpu {
     }
 
     fn stack_push(&mut self, datum: u8) {
-        self.mem.set(join_bytes(0x01, self.s), datum);
+        self.mem_write(join_bytes(0x01, self.s), datum);
         self.s -= 1;
     }
 
@@ -503,7 +503,7 @@ impl Cpu {
     /// the program counter should advance. The cycle pause count should be _one lower than
     /// the documentation says_, because we're using up the first cycle executing the
     /// instruction in the first place.
-    fn set_pause_and_return_shift(&mut self, pause: u8, op: &Opcode) -> u16 {
+    fn set_pause_and_return_shift(&mut self, pause: u16, op: &Opcode) -> u16 {
         self.remaining_pause = pause;
         op.1.byte_count()
     }
@@ -672,6 +672,16 @@ impl Cpu {
         self.set_zero(val == 0);
     }
 
+    fn mem_write(&mut self, addr: u16, val: u8) {
+        if addr == 0x4014 {
+            let dma = self.mem.get_page(join_bytes(val, 0));
+            self.mem.bus.borrow_mut().set_oamdma(dma);
+            self.remaining_pause += 513;  // TODO odd cycle??
+        } else {
+            self.mem.set(addr, val);
+        }
+    }
+
     // Opcodes!
 
     fn flag_op(&mut self, func: fn(&mut Cpu) -> ()) -> u16 {
@@ -718,7 +728,7 @@ impl Cpu {
             value <<= 1;
             self.set_carry(bit_7 as bool);
             self.set_value_flags(value);
-            self.mem.set(addr, value);
+            self.mem_write(addr, value);
         }
         match op.1 {
             Accumulator => self.set_pause_and_return_shift(1, op),
@@ -776,7 +786,7 @@ impl Cpu {
     fn dec(&mut self, op: &Opcode) -> u16 {
         let addr = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, true);
-        self.mem.set(addr, new_val);
+        self.mem_write(addr, new_val);
         shift
     }
 
@@ -813,7 +823,7 @@ impl Cpu {
     fn inc(&mut self, op: &Opcode) -> u16 {
         let addr = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, false);
-        self.mem.set(addr, new_val);
+        self.mem_write(addr, new_val);
         shift
     }
 
@@ -899,7 +909,7 @@ impl Cpu {
             value >>= 1;
             self.set_carry(bit_1 as bool);
             self.set_value_flags(value);
-            self.mem.set(addr, value);
+            self.mem_write(addr, value);
         }
         match op.1 {
             Accumulator => self.set_pause_and_return_shift(1, op),
@@ -966,7 +976,7 @@ impl Cpu {
         } else {
             let addr = self.resolve_addr(op);
             let new_val = self.rol_internal(self.mem.get(addr));
-            self.mem.set(addr, new_val);
+            self.mem_write(addr, new_val);
         }
         match op.1 {
             Accumulator => self.set_pause_and_return_shift(1, op),
@@ -997,7 +1007,7 @@ impl Cpu {
         } else {
             let addr = self.resolve_addr(op);
             let new_val = self.ror_internal(self.mem.get(addr));
-            self.mem.set(addr, new_val);
+            self.mem_write(addr, new_val);
         }
         match op.1 {
             Accumulator => self.set_pause_and_return_shift(1, op),
@@ -1027,7 +1037,7 @@ impl Cpu {
     }
 
     fn sax(&mut self, op: &Opcode) -> u16 {
-        self.mem.set(self.resolve_addr(op), self.a & self.x);
+        self.mem_write(self.resolve_addr(op), self.a & self.x);
         match op.1 {
             ZeroPage => self.set_pause_and_return_shift(2, op),
             Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op),
@@ -1049,7 +1059,7 @@ impl Cpu {
     }
 
     fn store(&mut self, op: &Opcode, value: u8) -> u16 {
-        self.mem.set(self.resolve_addr(op), value);
+        self.mem_write(self.resolve_addr(op), value);
         match op.1 {
             ZeroPage => self.set_pause_and_return_shift(2, op),
             ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op),
