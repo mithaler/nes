@@ -345,7 +345,10 @@ impl Ppu {
                 let y = self.scanline - (sprite.y as i16);
                 x = self.tick - x;
                 let pixel = sprite.pattern[y as usize][x as usize];
-                return Some(sprite.palette[pixel as usize]);
+                return match pixel == 0 {
+                    true => None,
+                    false => Some(sprite.palette[pixel as usize])
+                };
             }
         }
         None
