@@ -179,13 +179,24 @@ impl PpuMem {
         // TODO sprite 0 hit, overflow
         out
     }
+
+    fn palette_ram_address(mut addr: u16) -> usize {
+        addr = (addr - 0x3F00) & 0x1F;
+        usize::from(
+            if addr >= 0x10 && (addr & 0b0000_0000_0000_0011) == 0 {
+                addr & 0b1111_1111_1110_1111
+            } else {
+                addr
+            }
+        )
+    }
 }
 
 impl Addressable for PpuMem {
     fn get(&self, addr: u16) -> u8 {
         match addr {
             0x0000 ... 0x3EFF => self.mapper.borrow().get_ppu_space(addr),
-            0x3F00 ... 0x3FFF => self.palette_ram[((addr - 0x3F00) % 0x20) as usize],
+            0x3F00 ... 0x3FFF => self.palette_ram[PpuMem::palette_ram_address(addr)],
             _ => panic!()
         }
     }
@@ -193,7 +204,7 @@ impl Addressable for PpuMem {
     fn set(&mut self, addr: u16, value: u8) {
         match addr {
             0x0000 ... 0x3EFF => self.mapper.borrow_mut().set_ppu_space(addr, value),
-            0x3F00 ... 0x3FFF => self.palette_ram[((addr - 0x3F00) % 0x20) as usize] = value,
+            0x3F00 ... 0x3FFF => self.palette_ram[PpuMem::palette_ram_address(addr)] = value,
             _ => panic!()
         }
     }
@@ -294,6 +305,11 @@ mod tests {
             assert_eq!(ppu.get(0x3F21), 0x34);
             assert_eq!(ppu.get(0x3FA1), 0x34);
             assert_eq!(ppu.get(0x3FC1), 0x34);
+
+            assert_eq!(PpuMem::palette_ram_address(0x3F10), 0x0);
+            assert_eq!(PpuMem::palette_ram_address(0x3F14), 0x4);
+            assert_eq!(PpuMem::palette_ram_address(0x3F18), 0x8);
+            assert_eq!(PpuMem::palette_ram_address(0x3F1C), 0xC);
         }
     }
 
