@@ -96,28 +96,27 @@ fn main() -> Result<(), Box<Error>> {
     let mut running = true;
     while running {
         // number of PPU cycles
-        let ppu_cycle_count = match odd_frame {
-            true => 89342,
-            false => 89342 // ??
-        };
-        running = render_frame(&mut context, ppu_cycle_count)?;
-        odd_frame = !odd_frame;
-    }
-    Ok(())
-}
-
-fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<bool, Box<Error>> {
-    for i in 0..ppu_cycles {
         for event in context.event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => return Ok(false),
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => running = false,
                 Event::KeyDown { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
                 Event::KeyUp { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
                 _ => {}
             }
         }
+        let ppu_cycle_count = match odd_frame {
+            true => 89342,
+            false => 89342 // ??
+        };
+        render_frame(&mut context, ppu_cycle_count)?;
+        odd_frame = !odd_frame;
+    }
+    Ok(())
+}
 
+fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>> {
+    for i in 0..ppu_cycles {
         if (i % 3) == 0 {
             context.cpu.borrow_mut().tick();
         }
@@ -128,5 +127,5 @@ fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<bool, Box<Erro
     context.canvas.copy(&context.texture, None, None)?;
     context.canvas.present();
 
-    Ok(true)
+    Ok(())
 }
