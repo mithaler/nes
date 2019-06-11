@@ -4,10 +4,12 @@ extern crate sdl2;
 use std::error::Error;
 use std::fs;
 use std::str;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use clap::{App, Arg};
-use sdl2::EventPump;
 use sdl2::event::Event;
+use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::render::{Canvas, Texture, TextureAccess};
@@ -31,6 +33,7 @@ mod ppu;
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
+const TARGET_DURATION: Duration = Duration::from_millis(1000 / 60);
 
 struct Context<'a> {
     canvas: Canvas<Window>,
@@ -91,11 +94,14 @@ fn main() -> Result<(), Box<Error>> {
     canvas.clear();
 
     let mut context = Context {event_pump, texture, cpu, ppu, controllers, canvas};
+    frame_loop(&mut context)
+}
 
+fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
     let mut odd_frame = false;
     let mut running = true;
     while running {
-        // number of PPU cycles
+        let before = Instant::now();
         for event in context.event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -111,6 +117,12 @@ fn main() -> Result<(), Box<Error>> {
         };
         render_frame(&mut context, ppu_cycle_count)?;
         odd_frame = !odd_frame;
+
+        let after = Instant::now();
+        match TARGET_DURATION.checked_sub(after - before) {
+            Some(to_sleep) => sleep(to_sleep),
+            None => {},
+        }
     }
     Ok(())
 }
