@@ -8,3 +8,6 @@ license = "Apache-2.0"
 [dependencies]
 clap = "~2.33.0"
 sdl2 = "~0.32.2"
+
+[profile.dev]
+opt-level = 2  # Way too slow to run anything without optimizations
