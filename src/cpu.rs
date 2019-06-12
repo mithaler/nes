@@ -355,6 +355,17 @@ mod opcodes {
     }
 }
 
+bitflags! {
+    struct Status: u8 {
+        const CARRY = 0b0000_0001;
+        const ZERO = 0b0000_0010;
+        const INTERRUPT_DISABLE= 0b0000_0100;
+        const BREAK = 0b0010_0000;
+        const DECIMAL = 0b0000_1000;
+        const OVERFLOW = 0b0100_0000;
+        const NEGATIVE = 0b1000_0000;
+    }
+}
 
 pub struct Cpu {
     // address space
@@ -366,7 +377,7 @@ pub struct Cpu {
     y: u8, // index Y
     pc: u16, // program counter
     s: u8, // stack
-    p: u8, // flags
+    p: Status, // flags
 
     remaining_pause: u16,
     instruction_counter: u64,
@@ -377,13 +388,6 @@ use opcodes::Operation::*;
 use opcodes::AddressMode::*;
 
 const SIGN_BIT: u8 = 0b1000_0000;
-
-const CARRY_FLAG: u8 = 0b0000_0001;
-const ZERO_FLAG: u8 = 0b0000_0010;
-const INTERRUPT_DISABLE_FLAG: u8 = 0b0000_0100;
-const DECIMAL_FLAG: u8 = 0b0000_1000;
-const OVERFLOW_FLAG: u8 = 0b0100_0000;
-const NEGATIVE_FLAG: u8 = SIGN_BIT;
 
 const NMI_VECTOR: u16 = 0xFFFA;
 const RESET_VECTOR: u16 = 0xFFFC;
@@ -402,7 +406,7 @@ impl Cpu {
             y: 0,
             pc: 0x8000,
             s: 0xfd,
-            p: 0x24,
+            p: Status::BREAK | Status::INTERRUPT_DISABLE,
             remaining_pause: 0,
             instruction_counter: 0,
         };
@@ -481,7 +485,7 @@ impl Cpu {
     fn interrupt(&mut self, b_mask: u8, vector: u16) {
         self.stack_push((self.pc >> 8) as u8);
         self.stack_push(self.pc as u8);
-        self.stack_push(self.p | b_mask);
+        self.stack_push(self.p.bits() | b_mask);
         self.pc = join_bytes(self.mem.get(vector + 1), self.mem.get(vector));
     }
 
@@ -616,55 +620,52 @@ impl Cpu {
         }
     }
 
-    fn set_flag(&mut self, mask: u8, set_to: bool) {
-        match set_to {
-            true => self.p |= mask,
-            false => self.p &= !mask
-        }
+    fn set_flag(&mut self, mask: Status, set_to: bool) {
+        self.p.set(mask, set_to)
     }
 
     fn carry(&self) -> bool {
-        (self.p & CARRY_FLAG) != 0
+        self.p.contains(Status::CARRY)
     }
 
     fn zero(&self) -> bool {
-        (self.p & ZERO_FLAG) != 0
+        self.p.contains(Status::ZERO)
     }
 
     fn overflow(&self) -> bool {
-        (self.p & OVERFLOW_FLAG) != 0
+        self.p.contains(Status::OVERFLOW)
     }
 
     fn negative(&self) -> bool {
-        (self.p & NEGATIVE_FLAG) != 0
+        self.p.contains(Status::NEGATIVE)
     }
 
     fn interrupt_disabled(&self) -> bool {
-        (self.p & INTERRUPT_DISABLE_FLAG) != 0
+        self.p.contains(Status::INTERRUPT_DISABLE)
     }
 
     fn set_carry(&mut self, carry: bool) {
-        self.set_flag(CARRY_FLAG, carry);
+        self.set_flag(Status::CARRY, carry);
     }
 
     fn set_zero(&mut self, zero: bool) {
-        self.set_flag(ZERO_FLAG, zero);
+        self.set_flag(Status::ZERO, zero);
     }
 
     fn set_interrupt_disable(&mut self, interrupt_disable: bool) {
-        self.set_flag(INTERRUPT_DISABLE_FLAG, interrupt_disable);
+        self.set_flag(Status::INTERRUPT_DISABLE, interrupt_disable);
     }
 
     fn set_decimal(&mut self, decimal: bool) {
-        self.set_flag(DECIMAL_FLAG, decimal);
+        self.set_flag(Status::DECIMAL, decimal);
     }
 
     fn set_overflow(&mut self, overflow: bool) {
-        self.set_flag(OVERFLOW_FLAG, overflow);
+        self.set_flag(Status::OVERFLOW, overflow);
     }
 
     fn set_negative(&mut self, negative: bool) {
-        self.set_flag(NEGATIVE_FLAG, negative);
+        self.set_flag(Status::NEGATIVE, negative);
     }
 
     fn set_value_flags(&mut self, val: u8) {
@@ -935,7 +936,7 @@ impl Cpu {
     }
 
     fn php(&mut self, _op: &Opcode) -> u16 {
-        self.stack_push(self.p | PHP_MASK);
+        self.stack_push(self.p.bits() | PHP_MASK);
         self.remaining_pause = 2;
         1
     }
@@ -954,7 +955,7 @@ impl Cpu {
     }
 
     fn plp(&mut self, _op: &Opcode) -> u16 {
-        self.p = self.stack_pop() & !PHP_MASK;
+        self.p = Status::from_bits_truncate(self.stack_pop() & !PHP_MASK);
         self.remaining_pause = 3;
         1
     }
@@ -1022,7 +1023,7 @@ impl Cpu {
     }
 
     fn rti(&mut self, op: &Opcode) -> u16 {
-        self.p = self.stack_pop();
+        self.p = Status::from_bits_truncate(self.stack_pop());
         self.remaining_pause += 1;
         self.rts(op);
         0  // do not advance one byte!

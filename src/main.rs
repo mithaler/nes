@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate sdl2;
+#[macro_use] extern crate bitflags;
 
 use std::error::Error;
 use std::fs;
