@@ -290,7 +290,7 @@ impl Ppu {
                     pattern,
                     x,
                     y: y as u8,
-                    index,
+                    index: sprite as u8,
                     behind_background,
                     palette
                 });
