@@ -42,16 +42,12 @@ impl NametableMirror {
     }
 }
 
-fn join_nibbles(contains_msb: u8, contains_lsb: u8) -> u8 {
-    (contains_msb & 0xF0) | (contains_lsb >> 4)
-}
-
 pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
-    let mapper_num = join_nibbles(header[5], header[4]);
+    let mapper_num = header[7] & 0b1111_0000 | ((header[6] & 0b1111_0000) >> 4);
     println!("Mapper number: {:?}", mapper_num);
     shared(match mapper_num {
         0 => Nrom::new(header, rom_sections),
-        _ => unimplemented!("Mapper {:?} unimplemented", mapper_num),
+        _ => unimplemented!("Mapper {:?}", mapper_num),
     })
 }
 
