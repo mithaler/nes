@@ -88,7 +88,7 @@ pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
 
 #[cfg(test)]
 pub fn test_mapper(prg_rom: &[u8], chr_rom: &[u8]) -> Mapper {
-    shared(Nrom::test_mapper(prg_rom, chr_rom))
+    Nrom::test_mapper(prg_rom, chr_rom)
 }
 
 #[cfg(test)]

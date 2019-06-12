@@ -54,15 +54,15 @@ impl Nrom {
     }
 
     #[cfg(test)]
-    pub fn test_mapper(prg_rom: &[u8], chr_rom: &[u8]) -> Nrom {
-        Nrom {
+    pub fn test_mapper(prg_rom: &[u8], chr_rom: &[u8]) -> Shared<Nrom> {
+        shared(Nrom {
             rom_size: RomSize::Sixteen,
             prg_ram: None,
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
             nametable_mirror: NametableMirror::Horizontal
-        }
+        })
     }
 }
 
