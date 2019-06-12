@@ -12,11 +12,11 @@ pub type CpuBus = Shared<Bus>;
 pub struct Bus {
     oamaddr: u8,  // $2003
     ppuscroll: u8,  // $2005
-    ppuaddr: u8,  // $2006
 
     address_latch_status: AddressLatchStatus,
     last_written: u8,
     ppu_write_addr: u16,
+    ppudata_read_buffer: u8,
 
     ppu_mem: Shared<PpuMem>,
     controllers: Shared<Controllers>
@@ -29,11 +29,11 @@ impl Bus {
         shared(Bus {
             oamaddr: 0,
             ppuscroll: 0,
-            ppuaddr: 0,
 
             address_latch_status: Empty,
             last_written: 0,
             ppu_write_addr: 0,
+            ppudata_read_buffer: 0,
 
             ppu_mem,
             controllers
@@ -53,8 +53,20 @@ impl Bus {
         ppustatus | self.last_written
     }
 
+    // https://wiki.nesdev.com/w/index.php/PPU_registers#The_PPUDATA_read_buffer_.28post-fetch.29
     fn get_ppudata(&mut self) -> u8 {
-        let out = self.ppu_mem.borrow().get(self.ppu_write_addr);
+        let (out, addr) = if (0x3F00..=0x3FFF).contains(&self.ppu_write_addr) {
+            (self.ppu_mem.borrow().get(self.ppu_write_addr),
+             if self.ppu_write_addr >= 0x3000 {
+                 self.ppu_write_addr - 0x1000
+             } else {
+                 self.ppu_write_addr
+             }
+            )
+        } else {
+            (self.ppudata_read_buffer, self.ppu_write_addr)
+        };
+        self.ppudata_read_buffer = self.ppu_mem.borrow().get(addr);
         self.advance_write_addr();
         out
     }
@@ -84,7 +96,6 @@ impl Bus {
     }
 
     fn set_ppuaddr(&mut self, value: u8) {
-        self.ppuaddr = value;
         self.address_latch_status = match self.address_latch_status {
             Empty => HoldingHighByte(value),
             HoldingHighByte(hi) => { self.ppu_write_addr = join_bytes(hi, value); Empty },
@@ -92,8 +103,9 @@ impl Bus {
     }
 
     fn set_ppudata(&mut self, value: u8) {
-        println!("VRAM write: {:02X?} to {:04X?}", value, self.ppu_write_addr);
-        self.ppu_mem.borrow_mut().set(self.ppu_write_addr, value);
+        let mirrored = self.ppu_write_addr & 0b0011_1111_1111_1111;
+        println!("VRAM write: {:02X?} to {:04X?}", value, mirrored);
+        self.ppu_mem.borrow_mut().set(mirrored, value);
         self.advance_write_addr();
     }
 
@@ -110,7 +122,7 @@ impl Bus {
             0x2003 => self.oamaddr,
             0x2004 => self.get_oamdata(),
             0x2005 => self.ppuscroll,
-            0x2006 => self.ppuaddr,
+            0x2006 => panic!("PPUADDR not readable by CPU!"),
             0x2007 => self.get_ppudata(),
 
             0x4016 => self.controllers.borrow_mut().report_controller_1(),

@@ -1,7 +1,7 @@
 use gxrom::Gxrom;
 use nrom::Nrom;
 
-use crate::common::{shared, Shared};
+use crate::common::Shared;
 
 mod nrom;  // 0
 mod gxrom;  // 66

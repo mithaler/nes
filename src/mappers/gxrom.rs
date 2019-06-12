@@ -64,12 +64,13 @@ impl Mapping for Gxrom {
             0x8000 ... 0xFFFF => {
                 self.chr_bank = (value & 0b0000_0011) as u16;
                 self.prg_bank = (value >> 4) as u16;
+                println!("Bankswitch: PRG {:?}, CHR {:?}", self.prg_bank, self.chr_bank);
             },
             _ => panic!("CPU write to unexpected addr: {:X?} -> {:X?}", addr, value),
         }
     }
 
-    fn get_cpu_page(&self, start_addr: u16) -> &[u8] {
+    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
         unimplemented!()
     }
 
