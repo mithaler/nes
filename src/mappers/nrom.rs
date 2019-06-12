@@ -1,7 +1,8 @@
 // Mapper 000: https://wiki.nesdev.com/w/index.php/NROM
 
-use crate::mappers::{Mapping, NametableMirror};
+use crate::mappers::{Mapping, NametableMirror, HeaderAttributes};
 use crate::memory::{initialized_mem, mem, Mem};
+use crate::common::{Shared, shared};
 
 // Mapper 000 supports ROM sizes of either 16 or 32 KB.
 enum RomSize {
@@ -19,50 +20,33 @@ pub struct Nrom {
 }
 
 impl Nrom {
-    pub fn new(header: &[u8], rom_sections: &[u8]) -> Nrom {
-        let prg_rom_size = header[4] as u16;
-        let chr_rom_size = header[5] as u16;
-        let prg_ram = match (header[6] & 0b0000_0100) != 0 {
-            true => Some(initialized_mem(0x2000)),
-            false => None,
-        };
-        let nametable_mirror = match (header[6] & 0b0000_0001) != 0 {
-            true => NametableMirror::Vertical,
-            false => NametableMirror::Horizontal
-        };
-        println!(
-            "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
-            prg_rom_size * 0x4000,
-            chr_rom_size * 0x2000,
-            prg_ram.is_some(),
-            nametable_mirror
-        );
+    pub fn new(header: &[u8], rom_sections: &[u8]) -> Shared<Nrom> {
+        let attrs = HeaderAttributes::from_headers(header);
 
-        if (header[6] & 0b0000_1000) != 0 {
-            unimplemented!("omg i have no idea what to do with a trainer");
-        }
-
-        let (rom_size, prg_rom, chr_rom) = match prg_rom_size {
+        let (rom_size, prg_rom, chr_rom) = match attrs.prg_rom_size {
             1 => (
                 RomSize::Sixteen,
                 &rom_sections[0..0x4000],
-                &rom_sections[0x4000..(0x4000 + (0x2000 * chr_rom_size)) as usize],
+                &rom_sections[0x4000..(0x4000 + (0x2000 * attrs.chr_rom_size)) as usize],
             ),
             2 => (
                 RomSize::ThirtyTwo,
                 &rom_sections[0..0x8000],
-                &rom_sections[0x8000..(0x8000 + (0x2000 * chr_rom_size)) as usize],
+                &rom_sections[0x8000..(0x8000 + (0x2000 * attrs.chr_rom_size)) as usize],
             ),
             _ => panic!(),
         };
-        Nrom {
+        shared(Nrom {
             rom_size,
-            prg_ram,
+            prg_ram: match attrs.prg_ram {
+                true => Some(initialized_mem(0x2000)),
+                false => None,
+            },
             prg_rom: mem(prg_rom),
             chr_rom: mem(chr_rom),
             internal_vram: initialized_mem(0x1000),
-            nametable_mirror
-        }
+            nametable_mirror: attrs.nametable_mirror
+        })
     }
 
     fn mirrored_addr(&self, addr: u16) -> usize {

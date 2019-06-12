@@ -106,6 +106,7 @@ struct Tile {
 struct Sprite {
     pattern: Vec<Vec<u8>>,
     palette: Palette,
+    index: u8,
     x: u8,
     y: u8,
     behind_background: bool,
@@ -289,6 +290,7 @@ impl Ppu {
                     pattern,
                     x,
                     y: y as u8,
+                    index,
                     behind_background,
                     palette
                 });
@@ -304,7 +306,8 @@ impl Ppu {
         // TODO even/odd frame
         if self.tick == 1 {
             println!("-- EXITING VBLANK --");
-            self.mem.borrow_mut().set_vblank(false);  // TODO sprite 0 hit, overflow
+            self.mem.borrow_mut().set_vblank(false);  // TODO overflow
+            self.mem.borrow_mut().set_sprite0hit(false);
         }
         self.framebuffer_index = 0;
     }
@@ -338,7 +341,9 @@ impl Ppu {
         tile.palette[pixel as usize]
     }
 
-    fn render_sprite_pixel(&self) -> Option<&'static Color> {
+    /// Returns the opaque pixel of the sprite on the current tick if there should be one,
+    /// plus a `bool` that is true if the sprite is sprite 0 (for Sprite 0 Hit detection).
+    fn render_sprite_pixel(&self) -> Option<(&'static Color, bool)> {
         for sprite in self.sprites.iter() {
             let mut x = u16::from(sprite.x);
             if self.tick >= x && self.tick < x + 8 {
@@ -347,7 +352,7 @@ impl Ppu {
                 let pixel = sprite.pattern[y as usize][x as usize];
                 return match pixel == 0 {
                     true => None,
-                    false => Some(sprite.palette[pixel as usize])
+                    false => Some((sprite.palette[pixel as usize], sprite.index == 0))
                 };
             }
         }
@@ -357,7 +362,7 @@ impl Ppu {
     fn visible_scanline(&mut self) {
         let ppumask = self.mem.borrow().get_ppumask();
         let mut bg_color: Option<&'static Color> = None;
-        let mut sprite_color: Option<&'static Color> = None;
+        let mut sprite: Option<(&'static Color, bool)> = None;
         if self.tick == 0 {
             self.sprites = self.scanline_sprites();
         } else if (1..=256).contains(&self.tick) {
@@ -365,9 +370,12 @@ impl Ppu {
                 bg_color = Some(self.render_background_pixel());
             }
             if (ppumask & 0b00010000) != 0 {
-                sprite_color = self.render_sprite_pixel();
+                sprite = self.render_sprite_pixel();
             }
-            let color = sprite_color
+            if sprite.is_some() && bg_color.is_some() && sprite.unwrap().1 {
+                self.mem.borrow_mut().set_sprite0hit(true);
+            }
+            let color = sprite.map(|s| s.0)
                 .or(bg_color)
                 .unwrap_or_else(|| color(self.mem.borrow().get(0x3F00)));
             self.framebuffer[self.framebuffer_index] = color.0;

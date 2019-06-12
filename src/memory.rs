@@ -107,8 +107,8 @@ pub struct PpuMem {
 
     ppuctrl: PpuCtrl,
     ppumask: u8,
-    oamaddr: u8,
     vblank: bool,
+    sprite0hit: bool,
 }
 
 type Pattern = (Vec<u8>, Vec<u8>);
@@ -122,8 +122,8 @@ impl PpuMem {
 
             ppuctrl: PpuCtrl::from_register(0),
             ppumask: 0,
-            oamaddr: 0,
             vblank: false,
+            sprite0hit: false,
         }
     }
 
@@ -148,6 +148,10 @@ impl PpuMem {
 
     pub fn set_vblank(&mut self, vblank: bool) {
         self.vblank = vblank;
+    }
+
+    pub fn set_sprite0hit(&mut self, sprite0hit: bool) {
+        self.sprite0hit = sprite0hit;
     }
 
     pub fn get_ppuctrl(&self) -> &PpuCtrl {
@@ -176,7 +180,10 @@ impl PpuMem {
         if self.vblank {
             out |= 0b1000_0000;
         }
-        // TODO sprite 0 hit, overflow
+        if self.sprite0hit {
+            out |= 0b0100_0000;
+        }
+        // TODO overflow
         out
     }
 

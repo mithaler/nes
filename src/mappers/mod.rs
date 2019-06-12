@@ -1,10 +1,44 @@
-mod nrom;
+use gxrom::Gxrom;
+use nrom::Nrom;
 
 use crate::common::{shared, Shared};
 
-use nrom::Nrom;
+mod nrom;  // 0
+mod gxrom;  // 66
 
 pub type Mapper = Shared<Mapping>;
+
+pub struct HeaderAttributes {
+    prg_rom_size: usize,  // in 16kb units
+    chr_rom_size: usize,  // in 8kb units
+    nametable_mirror: NametableMirror,
+    prg_ram: bool,
+}
+
+impl HeaderAttributes {
+    pub fn from_headers(header: &[u8]) -> HeaderAttributes {
+        let attrs = HeaderAttributes {
+            prg_rom_size: header[4] as usize,
+            chr_rom_size: header[5] as usize,
+            prg_ram: (header[6] & 0b0000_0100) != 0,
+            nametable_mirror: match (header[6] & 0b0000_0001) != 0 {
+                true => NametableMirror::Vertical,
+                false => NametableMirror::Horizontal
+            }
+        };
+        println!(
+            "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
+            attrs.prg_rom_size * 0x4000,
+            attrs.chr_rom_size * 0x2000,
+            attrs.prg_ram,
+            attrs.nametable_mirror
+        );
+        if (header[6] & 0b0000_1000) != 0 {
+            unimplemented!("Trainer!?");
+        }
+        attrs
+    }
+}
 
 pub trait Mapping {
     fn get_cpu_space(&self, addr: u16) -> u8;
@@ -45,10 +79,11 @@ impl NametableMirror {
 pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
     let mapper_num = header[7] & 0b1111_0000 | ((header[6] & 0b1111_0000) >> 4);
     println!("Mapper number: {:?}", mapper_num);
-    shared(match mapper_num {
+    match mapper_num {
         0 => Nrom::new(header, rom_sections),
+        66 => Gxrom::new(header, rom_sections),
         _ => unimplemented!("Mapper {:?}", mapper_num),
-    })
+    }
 }
 
 #[cfg(test)]

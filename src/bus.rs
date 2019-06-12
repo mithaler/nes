@@ -11,7 +11,6 @@ pub type CpuBus = Shared<Bus>;
 
 pub struct Bus {
     oamaddr: u8,  // $2003
-    oamdata: u8,  // $2004
     ppuscroll: u8,  // $2005
     ppuaddr: u8,  // $2006
 
@@ -29,7 +28,6 @@ impl Bus {
     pub fn new(ppu_mem: Shared<PpuMem>, controllers: Shared<Controllers>) -> CpuBus {
         shared(Bus {
             oamaddr: 0,
-            oamdata: 0,
             ppuscroll: 0,
             ppuaddr: 0,
 
@@ -61,6 +59,10 @@ impl Bus {
         out
     }
 
+    fn get_oamdata(&self) -> u8 {
+        self.ppu_mem.borrow().borrow_oam()[self.oamaddr as usize]
+    }
+
     fn set_ppuctrl(&mut self, value: u8) {
         self.ppu_mem.borrow_mut().set_ppuctrl(value);
     }
@@ -73,8 +75,8 @@ impl Bus {
         self.oamaddr = value;
     }
 
-    fn set_oamdata(&mut self, value: u8) {
-        self.oamdata = value;
+    fn set_oamdata(&mut self, _value: u8) {
+        unimplemented!("OAMDATA register write");
     }
 
     fn set_ppuscroll(&mut self, value: u8) {
@@ -106,7 +108,7 @@ impl Bus {
             0x2001 => panic!("PPUMASK not readable by CPU!"),
             0x2002 => self.get_ppustatus(),
             0x2003 => self.oamaddr,
-            0x2004 => self.oamdata,
+            0x2004 => self.get_oamdata(),
             0x2005 => self.ppuscroll,
             0x2006 => self.ppuaddr,
             0x2007 => self.get_ppudata(),
