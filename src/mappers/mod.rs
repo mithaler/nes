@@ -26,7 +26,7 @@ impl HeaderAttributes {
                 false => NametableMirror::Horizontal
             }
         };
-        println!(
+        info!(
             "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             attrs.prg_rom_size * 0x4000,
             attrs.chr_rom_size * 0x2000,
@@ -78,7 +78,7 @@ impl NametableMirror {
 
 pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
     let mapper_num = header[7] & 0b1111_0000 | ((header[6] & 0b1111_0000) >> 4);
-    println!("Mapper number: {:?}", mapper_num);
+    info!("Mapper number: {:?}", mapper_num);
     match mapper_num {
         0 => Nrom::new(header, rom_sections),
         66 => Gxrom::new(header, rom_sections),

@@ -9,6 +9,8 @@ license = "Apache-2.0"
 bitflags = "~1.1.0"
 clap = "~2.33.0"
 sdl2 = "~0.32.2"
+log = "^0.4.6"
+simplelog = "^0.5.3"
 
 [profile.dev]
 opt-level = 2  # Way too slow to run anything without optimizations

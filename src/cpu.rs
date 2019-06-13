@@ -1102,9 +1102,9 @@ impl Clocked for Cpu {
 
         self.instruction_counter += 1;
         let op = opcodes::resolve(self.mem.get(self.pc));
-        println!("{:?} @ {:04X?} (A:{:02X?} X:{:02X?} Y:{:02X?} P:{:02X?} SP:{:02X?}): {:?}: {:04X?}",
-                 self.instruction_counter, self.pc, self.a, self.x, self.y, self.p, self.s,
-                 op, self.resolve_addr(op));
+        trace!("{:?} @ {:04X?} (A:{:02X?} X:{:02X?} Y:{:02X?} P:{:02X?} SP:{:02X?}): {:?}: {:04X?}",
+               self.instruction_counter, self.pc, self.a, self.x, self.y, self.p.bits(), self.s,
+               op, self.resolve_addr(op));
         self.execute_opcode(op);
     }
 }

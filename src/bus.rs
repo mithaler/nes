@@ -76,10 +76,12 @@ impl Bus {
     }
 
     fn set_ppuctrl(&mut self, value: u8) {
+        debug!("PPUCTRL set: {:#010b}", value);
         self.ppu_mem.borrow_mut().set_ppuctrl(value);
     }
 
     fn set_ppumask(&mut self, value: u8) {
+        debug!("PPUMASK set: {:#010b}", value);
         self.ppu_mem.borrow_mut().set_ppumask(value);
     }
 
@@ -104,7 +106,7 @@ impl Bus {
 
     fn set_ppudata(&mut self, value: u8) {
         let mirrored = self.ppu_write_addr & 0b0011_1111_1111_1111;
-        println!("VRAM write: {:02X?} to {:04X?}", value, mirrored);
+        debug!("VRAM write: {:02X?} to {:04X?}", value, mirrored);
         self.ppu_mem.borrow_mut().set(mirrored, value);
         self.advance_write_addr();
     }
@@ -128,7 +130,7 @@ impl Bus {
             0x4016 => self.controllers.borrow_mut().report_controller_1(),
             0x4017 => self.controllers.borrow_mut().report_controller_2(),
 
-            _ => { println!("Unimplemented register read: {:04X?}", register); 0},
+            _ => { warn!("Unimplemented register read: {:04X?}", register); 0},
         }
     }
 
@@ -147,7 +149,7 @@ impl Bus {
             0x4014 => panic!("Don't write to $4014, call set_oamdma instead!"),
             0x4016 => self.controllers.borrow_mut().set_polling(if value != 0 {true} else {false}),
 
-            _ => println!("Unimplemented register write: {:04X?} -> {:02X?}", register, value),
+            _ => warn!("Unimplemented register write: {:04X?} -> {:02X?}", register, value),
         }
     }
 }

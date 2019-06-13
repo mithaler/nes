@@ -305,7 +305,7 @@ impl Ppu {
     fn dummy_scanline(&mut self) {
         // TODO even/odd frame
         if self.tick == 1 {
-            println!("-- EXITING VBLANK --");
+            debug!("-- EXITING VBLANK --");
             self.mem.borrow_mut().set_vblank(false);  // TODO overflow
             self.mem.borrow_mut().set_sprite0hit(false);
         }
@@ -314,7 +314,7 @@ impl Ppu {
 
     fn vblank_scanline(&mut self) {
         if self.scanline == 241 && self.tick == 1 {
-            println!("-- ENTERING VBLANK --");
+            debug!("-- ENTERING VBLANK --");
             self.mem.borrow_mut().set_vblank(true);
             if self.mem.borrow().get_ppuctrl().send_nmi {
                 self.cpu.borrow_mut().nmi();

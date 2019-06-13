@@ -1,6 +1,8 @@
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate log;
 extern crate clap;
 extern crate sdl2;
-#[macro_use] extern crate bitflags;
+extern crate simplelog;
 
 use std::error::Error;
 use std::fs;
@@ -9,12 +11,14 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use clap::{App, Arg};
+use log::LevelFilter;
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::render::{Canvas, Texture, TextureAccess};
 use sdl2::video::Window;
+use simplelog::{Config, TermLogger};
 
 use crate::bus::Bus;
 use crate::common::{Clocked, shared, Shared};
@@ -57,7 +61,16 @@ fn main() -> Result<(), Box<Error>> {
         .arg(Arg::with_name("test_mode")
             .short("t")
             .help("Enables test mode"))
+        .arg(Arg::with_name("debug logging")
+            .short("d")
+            .help("Enables debug logging"))
         .get_matches();
+
+    let loglevel = match matches.is_present("debug logging") {
+        true => LevelFilter::Debug,
+        false => LevelFilter::Info
+    };
+    TermLogger::init(loglevel, Config::default())?;
 
     let rom: Mem = Box::new(fs::read(matches.value_of("ROM_FILE").unwrap())?);
 

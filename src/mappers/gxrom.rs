@@ -64,7 +64,7 @@ impl Mapping for Gxrom {
             0x8000 ... 0xFFFF => {
                 self.chr_bank = (value & 0b0000_0011) as u16;
                 self.prg_bank = (value >> 4) as u16;
-                println!("Bankswitch: PRG {:?}, CHR {:?}", self.prg_bank, self.chr_bank);
+                info!("Bankswitch: PRG {:?}, CHR {:?}", self.prg_bank, self.chr_bank);
             },
             _ => panic!("CPU write to unexpected addr: {:X?} -> {:X?}", addr, value),
         }
