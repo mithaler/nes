@@ -2,6 +2,7 @@ use crate::common::{Addressable, Shared, shared, join_bytes};
 use crate::controllers::Controllers;
 use crate::memory::PpuMem;
 
+// TODO: this and PPUSCROLL status are somehow the same thing, but I'm really confused about how.
 enum AddressLatchStatus {
     Empty,
     HoldingHighByte(u8),
@@ -11,7 +12,6 @@ pub type CpuBus = Shared<Bus>;
 
 pub struct Bus {
     oamaddr: u8,  // $2003
-    ppuscroll: u8,  // $2005
 
     address_latch_status: AddressLatchStatus,
     last_written: u8,
@@ -28,7 +28,6 @@ impl Bus {
     pub fn new(ppu_mem: Shared<PpuMem>, controllers: Shared<Controllers>) -> CpuBus {
         shared(Bus {
             oamaddr: 0,
-            ppuscroll: 0,
 
             address_latch_status: Empty,
             last_written: 0,
@@ -94,7 +93,12 @@ impl Bus {
     }
 
     fn set_ppuscroll(&mut self, value: u8) {
-        self.ppuscroll = value;
+        debug!("PPUSCROLL write: {:02X?}", value);
+        // I am really not sure if this interaction between PPUADDR and PPUSCROLL is right :(
+        self.address_latch_status = match self.address_latch_status {
+            Empty => {self.ppu_mem.borrow_mut().scroll_x = value; HoldingHighByte(value)},
+            HoldingHighByte(_) => {self.ppu_mem.borrow_mut().scroll_y = value; Empty}
+        }
     }
 
     fn set_ppuaddr(&mut self, value: u8) {
@@ -123,7 +127,7 @@ impl Bus {
             0x2002 => self.get_ppustatus(),
             0x2003 => self.oamaddr,
             0x2004 => self.get_oamdata(),
-            0x2005 => self.ppuscroll,
+            0x2005 => panic!("PPUSCROLL not readable by CPU!"),
             0x2006 => panic!("PPUADDR not readable by CPU!"),
             0x2007 => self.get_ppudata(),
 

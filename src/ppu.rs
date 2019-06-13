@@ -11,7 +11,11 @@ pub struct Ppu {
     framebuffer_index: usize,
     framebuffer: [u8; (256 * 240 * 3)],
     scanline: i16,  // -1 - 261
-    tick: u16  // 0 - 340
+    tick: u16,  // 0 - 340
+
+    // Unlike the corresponding fields in PpuMem, these take into account the nametable (hence u16)
+    scroll_x: u16,
+    scroll_y: u16,
 }
 
 // R, G, B
@@ -128,6 +132,8 @@ impl Ppu {
             framebuffer: [0; (256 * 240 * 3)],  // 3 bytes per pixel
             scanline: -1,
             tick: 0,
+            scroll_x: 0,
+            scroll_y: 0,
         }
     }
 
@@ -243,7 +249,8 @@ impl Ppu {
     }
 
     fn curr_tile_coordinates(&self) -> (u8, u8) {
-        ((self.tick / 8) as u8, (self.scanline / 8) as u8)
+        ((((self.tick + self.scroll_x) / 8) % 64) as u8,
+         (((self.scanline + self.scroll_y as i16) / 8) % 60) as u8)
     }
 
     fn tile(&self, x: u8, y: u8) -> Tile {
@@ -322,6 +329,19 @@ impl Ppu {
         }
     }
 
+    fn update_scroll_position(&mut self) {
+        let mem = self.mem.borrow();
+        let (mut x, mut y, ppuctrl) = (mem.scroll_x as u16, mem.scroll_y as u16, mem.get_ppuctrl());
+        if (ppuctrl.nametable_num & 0b0000_0001) != 0 {
+            x += 256;
+        }
+        if (ppuctrl.nametable_num & 0b0000_0010) != 0 {
+            y += 240;
+        }
+        self.scroll_x = x;
+        self.scroll_y = y;
+    }
+
     fn update_tile(&mut self) {
         let (x, y) = self.curr_tile_coordinates();
         match &self.tile {
@@ -337,7 +357,9 @@ impl Ppu {
     fn render_background_pixel(&mut self) -> &'static Color {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
-        let pixel = tile.pattern[(self.scanline % 8) as usize][(self.tick % 8) as usize];
+        let y = ((self.scanline + (self.scroll_y as i16 & 0b0000_0111)) % 8) as usize;
+        let x = ((self.tick + (self.scroll_x & 0b0000_0111)) % 8) as usize;
+        let pixel = tile.pattern[y][x];
         tile.palette[pixel as usize]
     }
 
@@ -360,6 +382,10 @@ impl Ppu {
     }
 
     fn visible_scanline(&mut self) {
+        if self.tick == 0 {
+            self.update_scroll_position();
+        }
+
         let ppumask = self.mem.borrow().get_ppumask();
         let mut bg_color: Option<&'static Color> = None;
         let mut sprite: Option<(&'static Color, bool)> = None;

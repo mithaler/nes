@@ -66,7 +66,7 @@ impl Addressable for CpuMem {
 
 #[derive(Debug)]
 pub struct PpuCtrl {
-    pub base_nametable_addr: u16,
+    pub nametable_num: u8,
     pub addr_increment_down: bool,
     pub sprite_table_addr: u16,
     pub background_table_addr: u16,
@@ -76,20 +76,14 @@ pub struct PpuCtrl {
 
 impl PpuCtrl {
     fn from_register(value: u8) -> PpuCtrl {
-        let base_nametable_addr = match value & 0b0000_0011 {
-            0 => 0x2000,
-            1 => 0x2400,
-            2 => 0x2800,
-            3 => 0x2C00,
-            _ => unreachable!()
-        };
+        let nametable_num = value & 0b0000_0011;
         let addr_increment_down = if (value & 0b0000_0100) != 0 { true } else { false };
         let sprite_table_addr = if (value & 0b0000_1000) != 0 { 0x1000 } else { 0x0000 };
         let background_table_addr = if (value & 0b0001_0000) != 0 { 0x1000 } else { 0x0000 };
         let sprite_size_large = if (value & 0b0010_0000) != 0 { true } else { false };
         let send_nmi = if (value & 0b1000_0000) != 0 { true } else { false };
         PpuCtrl {
-            base_nametable_addr,
+            nametable_num,
             addr_increment_down,
             sprite_table_addr,
             background_table_addr,
@@ -107,6 +101,8 @@ pub struct PpuMem {
 
     ppuctrl: PpuCtrl,
     ppumask: u8,
+    pub scroll_x: u8,
+    pub scroll_y: u8,
     vblank: bool,
     sprite0hit: bool,
 }
@@ -122,6 +118,8 @@ impl PpuMem {
 
             ppuctrl: PpuCtrl::from_register(0),
             ppumask: 0,
+            scroll_x: 0,
+            scroll_y: 0,
             vblank: false,
             sprite0hit: false,
         }
