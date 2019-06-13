@@ -371,11 +371,10 @@ impl Ppu {
             if self.tick >= x && self.tick < x + 8 {
                 let y = self.scanline - (sprite.y as i16);
                 x = self.tick - x;
-                let pixel = sprite.pattern[y as usize][x as usize];
-                return match pixel == 0 {
-                    true => None,
-                    false => Some((sprite.palette[pixel as usize], sprite.index == 0))
-                };
+                let pixel = sprite.pattern[y as usize][x as usize] as usize;
+                if pixel != 0 {
+                    return Some((sprite.palette[pixel], sprite.index == 0));
+                }
             }
         }
         None
