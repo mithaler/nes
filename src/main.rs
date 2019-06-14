@@ -114,12 +114,15 @@ fn main() -> Result<(), Box<Error>> {
 fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
     let mut odd_frame = false;
     let mut running = true;
+    let mut turbo = false;
     while running {
         let before = Instant::now();
         for event in context.event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => running = false,
+                Event::KeyDown { keycode: Some(Keycode::Backquote), .. } => turbo = true,
+                Event::KeyUp { keycode: Some(Keycode::Backquote), .. } => turbo = false,
                 Event::KeyDown { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
                 Event::KeyUp { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
                 _ => {}
@@ -132,10 +135,12 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
         render_frame(&mut context, ppu_cycle_count)?;
         odd_frame = !odd_frame;
 
-        let after = Instant::now();
-        match TARGET_DURATION.checked_sub(after - before) {
-            Some(to_sleep) => sleep(to_sleep),
-            None => {},
+        if !turbo {
+            let after = Instant::now();
+            match TARGET_DURATION.checked_sub(after - before) {
+                Some(to_sleep) => sleep(to_sleep),
+                None => {},
+            }
         }
     }
     Ok(())
