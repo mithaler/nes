@@ -2,8 +2,10 @@ use gxrom::Gxrom;
 use nrom::Nrom;
 
 use crate::common::Shared;
+use crate::mappers::mmc1::Mmc1;
 
 mod nrom;  // 0
+mod mmc1;  // 1
 mod gxrom;  // 66
 
 pub type Mapper = Shared<Mapping>;
@@ -11,6 +13,7 @@ pub type Mapper = Shared<Mapping>;
 pub struct HeaderAttributes {
     prg_rom_size: usize,  // in 16kb units
     chr_rom_size: usize,  // in 8kb units
+    chr_ram_size: usize,  // in 8kb units
     nametable_mirror: NametableMirror,
     prg_ram: bool,
 }
@@ -20,16 +23,18 @@ impl HeaderAttributes {
         let attrs = HeaderAttributes {
             prg_rom_size: header[4] as usize,
             chr_rom_size: header[5] as usize,
-            prg_ram: (header[6] & 0b0000_0100) != 0,
+            chr_ram_size: ((64 << (header[11] & 0b0000_1111)) / 0x2000) as usize,
+            prg_ram: (header[6] & 0b0000_0010) != 0,
             nametable_mirror: match (header[6] & 0b0000_0001) != 0 {
                 true => NametableMirror::Vertical,
                 false => NametableMirror::Horizontal
             }
         };
         info!(
-            "PRG ROM size: 0x{:X?}, CHR ROM size: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
+            "PRG ROM: 0x{:X?}, CHR ROM: 0x{:X?}, CHR RAM: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             attrs.prg_rom_size * 0x4000,
             attrs.chr_rom_size * 0x2000,
+            attrs.chr_ram_size * 0x2000,
             attrs.prg_ram,
             attrs.nametable_mirror
         );
@@ -49,27 +54,33 @@ pub trait Mapping {
     fn set_ppu_space(&mut self, addr: u16, value: u8);
 }
 
+pub trait Resolver {
+    /// Takes an address directly from the way the CPU/PPU asked for it, and resolves it to
+    /// an address within the memory actually stored by a mapper.
+    fn resolve_addr(&self, addr: u16) -> usize;
+}
+
 #[derive(Debug)]
 pub enum NametableMirror {
     Horizontal,
     Vertical
 }
 
-impl NametableMirror {
-    fn mirrored_addr(&self, addr: u16) -> usize {
+impl Resolver for NametableMirror {
+    fn resolve_addr(&self, addr: u16) -> usize {
         usize::from(match self {
             NametableMirror::Horizontal => {
                 match addr {
                     0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
-                    0x2400 ... 0x27FF | 0x2C00 ... 0x2EFF => addr & 0b1111_1011_1111_1111,
-                    _ => unreachable!(),
+                    0x2400 ... 0x27FF | 0x2C00 ... 0x2FFF => addr & 0b1111_1011_1111_1111,
+                    _ => unreachable!("nametable addr {:0X?}", addr),
                 }
             },
             NametableMirror::Vertical => {
                 match addr {
                     0x2000 ... 0x23FF | 0x2400 ... 0x27FF => addr,
-                    0x2800 ... 0x2BFF | 0x2C00 ... 0x2EFF => addr & 0b1111_0111_1111_1111,
-                    _ => unreachable!(),
+                    0x2800 ... 0x2BFF | 0x2C00 ... 0x2FFF => addr & 0b1111_0111_1111_1111,
+                    _ => unreachable!("nametable addr {:0X?}", addr),
                 }
             }
         })
@@ -81,6 +92,7 @@ pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
     info!("Mapper number: {:?}", mapper_num);
     match mapper_num {
         0 => Nrom::new(header, rom_sections),
+        1 => Mmc1::new(header, rom_sections),
         66 => Gxrom::new(header, rom_sections),
         _ => unimplemented!("Mapper {:?}", mapper_num),
     }

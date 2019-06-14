@@ -1,6 +1,6 @@
 // Mapper 000: https://wiki.nesdev.com/w/index.php/NROM
 
-use crate::mappers::{Mapping, NametableMirror, HeaderAttributes};
+use crate::mappers::{Mapping, NametableMirror, HeaderAttributes, Resolver};
 use crate::memory::{initialized_mem, mem, Mem};
 use crate::common::{Shared, shared};
 
@@ -50,7 +50,7 @@ impl Nrom {
     }
 
     fn mirrored_addr(&self, addr: u16) -> usize {
-        self.nametable_mirror.mirrored_addr(addr) - 0x2000
+        self.nametable_mirror.resolve_addr(addr) - 0x2000
     }
 
     #[cfg(test)]

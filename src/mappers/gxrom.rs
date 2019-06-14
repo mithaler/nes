@@ -1,6 +1,6 @@
 // Mapper 066: https://wiki.nesdev.com/w/index.php/GxROM
 
-use crate::mappers::{NametableMirror, HeaderAttributes, Mapping};
+use crate::mappers::{NametableMirror, HeaderAttributes, Mapping, Resolver};
 use crate::memory::{Mem, initialized_mem, mem};
 use crate::common::{Shared, shared};
 
@@ -36,7 +36,7 @@ impl Gxrom {
     }
 
     fn mirrored_addr(&self, addr: u16) -> usize {
-        self.nametable_mirror.mirrored_addr(addr) - 0x2000
+        self.nametable_mirror.resolve_addr(addr) - 0x2000
     }
 
     /// Given a requested address, returns the actual position in the ROM after bankswitching.
