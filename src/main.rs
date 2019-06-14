@@ -64,6 +64,10 @@ fn main() -> Result<(), Box<Error>> {
         .arg(Arg::with_name("debug logging")
             .short("d")
             .help("Enables debug logging"))
+        .arg(Arg::with_name("ui scale")
+            .short("s")
+            .takes_value(true)
+            .help("UI scale factor (default 3)"))
         .get_matches();
 
     let loglevel = match matches.is_present("debug logging") {
@@ -91,7 +95,8 @@ fn main() -> Result<(), Box<Error>> {
     let video_subsystem = sdl_context.video()?;
     let event_pump = sdl_context.event_pump()?;
 
-    let window = video_subsystem.window("NES", WIDTH, HEIGHT)
+    let ui_scale_factor = matches.value_of("ui scale").unwrap_or("3").parse::<u32>()?;
+    let window = video_subsystem.window("NES", WIDTH * ui_scale_factor, HEIGHT * ui_scale_factor)
         .position_centered()
         .build()
         .unwrap();
