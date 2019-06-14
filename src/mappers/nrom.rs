@@ -70,8 +70,8 @@ impl Mapping for Nrom {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to read it!")[(addr - 0x6000) as usize],
+            0x4020...0x5FFF => 0,  // open bus I guess?
+            0x6000...0x7FFF => self.prg_ram.as_ref().map(|ram| ram[(addr - 0x6000) as usize]).unwrap_or(0),
             0x8000...0xBFFF => self.prg_rom[(addr - 0x8000) as usize],
             0xC000...0xFFFF => match self.rom_size {
                 RomSize::Sixteen => self.prg_rom[(addr - 0xC000) as usize],

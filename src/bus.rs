@@ -123,7 +123,7 @@ impl Bus {
     pub fn get(&mut self, register: u16) -> u8 {
         match register {
             0x2000 => panic!("PPUCTRL not readable by CPU!"),
-            0x2001 => panic!("PPUMASK not readable by CPU!"),
+            0x2001 => 0,  // I guess this should return the latch value, I dunno
             0x2002 => self.get_ppustatus(),
             0x2003 => self.oamaddr,
             0x2004 => self.get_oamdata(),
