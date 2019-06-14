@@ -11,6 +11,7 @@ All of these things _mostly_ work. :)
 - [x] CPU (`nestest` matches golden log)
 - [x] PPU backgrounds (Donkey Kong title screen)
 - [x] PPU sprites (Donkey Kong title screen sprite)
+- [x] Keyboard controller input (Donkey Kong playable)
 - [x] PPU scrolling (Super Mario Bros. playable)
 - [x] INES Mapper 001 (Final Fantasy runs)
 - [ ] APU audio
