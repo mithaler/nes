@@ -118,7 +118,8 @@ struct Sprite {
 }
 
 fn color(id: u8) -> ColorRef {
-    &COLORS[id as usize]
+    // There are only 64 colors, I believe we just mirror them if games go OOB
+    &COLORS[(id & 0b0011_1111) as usize]
 }
 
 impl Ppu {
