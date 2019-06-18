@@ -112,6 +112,7 @@ struct Sprite {
     pattern: Vec<Vec<u8>>,
     palette: Palette,
     index: u8,
+    large: bool,
     x: u8,
     y: u8,
     behind_background: bool,
@@ -144,12 +145,17 @@ impl Ppu {
     }
 
     // TODO optimization: since we're not caching these from scanline to scanline, we only need
-    // one row of these at a time, so we don't have to return and store all 8.
-    fn pattern(&self, num: u8, base_addr: u16, horizontal_flip: bool, vertical_flip: bool) -> Vec<Vec<u8>> {
-        let pattern = self.mem.borrow().pattern(num, base_addr);
+    // one row of these at a time, so we don't have to return and store all 8/16.
+    fn pattern(&self, num: u8, base_addr: u16, large: bool, horizontal_flip: bool, vertical_flip: bool) -> Vec<Vec<u8>> {
+        let mut pattern = self.mem.borrow().pattern(num, base_addr, large);
+        if large {
+            let mut pattern2 = self.mem.borrow().pattern(num + 1, base_addr, large);
+            pattern.0.append(&mut pattern2.0);
+            pattern.1.append(&mut pattern2.1);
+        }
         let iter = pattern.0.iter().zip(pattern.1.iter());
 
-        let mut ret: Vec<Vec<u8>> = Vec::with_capacity(8);
+        let mut ret: Vec<Vec<u8>> = Vec::with_capacity(if large {16} else {8});
         for (left, right) in iter {
             let mut row = Vec::with_capacity(8);
             let mut bitmask = 0b1000_0000u8;
@@ -259,7 +265,7 @@ impl Ppu {
         let background_table_addr = { self.mem.borrow().get_ppuctrl().background_table_addr };
         let num = self.tile_pattern_num(x, y);
         let palette = self.tile_colorset(x, y);
-        let pattern = self.pattern(num, background_table_addr, false, false);
+        let pattern = self.pattern(num, background_table_addr, false, false, false);
         Tile {x, y, num, pattern, palette}
     }
 
@@ -267,16 +273,13 @@ impl Ppu {
         let mem = self.mem.borrow();
         let ppuctrl = mem.get_ppuctrl();
         let large = ppuctrl.sprite_size_large;
-        if large {
-            unimplemented!("8x16 sprites");
-        }
         let oam = mem.borrow_oam();
 
         let mut out = Box::new(Vec::with_capacity(8));
         let scanline = self.scanline as u16;  // safe, only called on rendering scanlines
         for sprite in 0..=63 {
             let y = oam[4 * sprite] as u16;
-            if scanline >= y && scanline < y + 8 {
+            if scanline >= y && scanline < y + (if large {16} else {8}) {
                 let (index, attrs, x) = (
                     oam[4 * sprite + 1],
                     oam[4 * sprite + 2],
@@ -291,12 +294,13 @@ impl Ppu {
                 let palette = self.sprite_colorset(palette_num);
 
                 let (num, tile_base_addr) = match large {
-                    true => (index >> 1, if (index & 1) != 0 { 0x1000 } else { 0x0 }),
+                    true => (index & 0b1111_1110, if (index & 1) != 0 { 0x1000 } else { 0x0 }),
                     false => (index, ppuctrl.sprite_table_addr)
                 };
-                let pattern = self.pattern(num, tile_base_addr, horizontal_flip, vertical_flip);
+                let pattern = self.pattern(num, tile_base_addr, large, horizontal_flip, vertical_flip);
                 out.push(Sprite {
                     pattern,
+                    large,
                     x,
                     y: y as u8,
                     index: sprite as u8,
@@ -509,7 +513,7 @@ mod tests {
     #[test]
     fn test_pattern_overlay() {
         let (_ppumem, test_ppu) = test_ppu();
-        let tile = test_ppu.pattern(1, 0, false, false);
+        let tile = test_ppu.pattern(1, 0, false, false, false);
         assert_eq!(tile.len(), 8);
         for (idx, row) in tile.iter().enumerate() {
             assert_eq!(row.as_slice(), TILE[idx]);

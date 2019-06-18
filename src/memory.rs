@@ -125,10 +125,11 @@ impl PpuMem {
         }
     }
 
-    pub fn pattern(&self, num_byte: u8, offset: u16) -> Pattern {
+    pub fn pattern(&self, num_byte: u8, offset: u16, large: bool) -> Pattern {
         let mut num = ((num_byte as u16) << 4) + offset;
-        let mut first = Vec::with_capacity(8);
-        let mut second = Vec::with_capacity(8);
+        let size = if large {16} else {8};
+        let mut first = Vec::with_capacity(size);
+        let mut second = Vec::with_capacity(size);
         for _ in 0 .. 8 {
             first.push(self.get(num));
             num += 1;

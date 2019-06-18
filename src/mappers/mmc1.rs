@@ -240,7 +240,7 @@ impl Uxrom {
             mem(&rom_sections[attrs.prg_rom_size * kb(16)..(attrs.prg_rom_size * kb(16)) + attrs.chr_rom_size * kb(8)])
         } else {
             // CHR RAM (assumes INES format!)
-            initialized_mem(0x2000)
+            initialized_mem(kb(8))
         };
 
         let prg_ram = match attrs.prg_ram {
