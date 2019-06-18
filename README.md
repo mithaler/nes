@@ -15,5 +15,5 @@ All of these things _mostly_ work. :)
 - [x] PPU scrolling (Super Mario Bros. playable)
 - [x] INES Mapper 001 (Final Fantasy runs)
 - [x] INES Mapper 002 (Megaman)
-- [ ] 8x16 sprites (Castlevania)
+- [x] 8x16 sprites (Castlevania)
 - [ ] APU audio

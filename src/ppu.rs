@@ -278,7 +278,7 @@ impl Ppu {
         let mut out = Box::new(Vec::with_capacity(8));
         let scanline = self.scanline as u16;  // safe, only called on rendering scanlines
         for sprite in 0..=63 {
-            let y = oam[4 * sprite] as u16;
+            let y = oam[4 * sprite] as u16 + 1;
             if scanline >= y && scanline < y + (if large {16} else {8}) {
                 let (index, attrs, x) = (
                     oam[4 * sprite + 1],
