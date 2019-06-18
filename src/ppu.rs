@@ -409,10 +409,10 @@ impl Ppu {
         if self.tick == 0 {
             self.sprites = self.scanline_sprites();
         } else if (1..=256).contains(&self.tick) {
-            if (ppumask & 0b00001000) != 0 {
+            if (ppumask & 0b0000_1000) != 0 {
                 bg_color = Some(self.render_background_pixel());
             }
-            if (ppumask & 0b00010000) != 0 {
+            if (ppumask & 0b0001_0000) != 0 {
                 sprite = self.render_sprite_pixel();
             }
             // TODO this should probably be taking into account "transparency" somehow

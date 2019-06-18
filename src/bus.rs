@@ -70,8 +70,8 @@ impl Bus {
         out
     }
 
-    fn get_oamdata(&self) -> u8 {
-        self.ppu_mem.borrow().borrow_oam()[self.oamaddr as usize]
+    fn get_oamdata(&mut self) -> u8 {
+        self.ppu_mem.borrow_mut().borrow_oam()[self.oamaddr as usize]
     }
 
     fn set_ppuctrl(&mut self, value: u8) {
@@ -88,8 +88,9 @@ impl Bus {
         self.oamaddr = value;
     }
 
-    fn set_oamdata(&mut self, _value: u8) {
-        unimplemented!("OAMDATA register write");
+    fn set_oamdata(&mut self, value: u8) {
+        self.ppu_mem.borrow_mut().set_oam(self.oamaddr, value);
+        self.oamaddr = self.oamaddr.wrapping_add(1);
     }
 
     fn set_ppuscroll(&mut self, value: u8) {

@@ -169,6 +169,10 @@ impl PpuMem {
         self.ppumask
     }
 
+    pub fn set_oam(&mut self, addr: u8, value: u8) {
+        self.oam[addr as usize] = value;
+    }
+
     pub fn set_oamdma(&mut self, mem: &[u8]) {
         self.oam.splice(.., mem.iter().cloned());
     }
