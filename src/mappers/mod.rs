@@ -34,6 +34,10 @@ impl HeaderAttributes {
                 false => NametableMirror::Horizontal
             }
         };
+        info!("{} ROM", match (header[7] & 0b0000_1100) == 0b0000_1100 {
+            true => "NES 2.0",
+            false => "INES"
+        });
         info!(
             "PRG ROM: 0x{:X?}, CHR ROM: 0x{:X?}, CHR RAM: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             attrs.prg_rom_size * 0x4000,

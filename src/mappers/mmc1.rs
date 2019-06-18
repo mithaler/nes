@@ -274,7 +274,7 @@ impl Mapping for Uxrom {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
             0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize],
+            0x6000...0x7FFF => self.prg_ram.as_ref().map_or(0, |ram| ram[(addr - 0x6000) as usize]),
             0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(addr)]
         }
     }
