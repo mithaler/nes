@@ -14,5 +14,6 @@ All of these things _mostly_ work. :)
 - [x] Keyboard controller input (Donkey Kong playable)
 - [x] PPU scrolling (Super Mario Bros. playable)
 - [x] INES Mapper 001 (Final Fantasy runs)
+- [x] INES Mapper 002 (Megaman)
+- [ ] 8x16 sprites (Castlevania)
 - [ ] APU audio
-- [ ] INES Mapper 002 (Castlevania)

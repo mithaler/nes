@@ -2,7 +2,7 @@ use gxrom::Gxrom;
 use nrom::Nrom;
 
 use crate::common::Shared;
-use crate::mappers::mmc1::Mmc1;
+use crate::mappers::mmc1::{Mmc1, Uxrom};
 
 mod nrom;  // 0
 mod mmc1;  // 1
@@ -103,6 +103,7 @@ pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
     match mapper_num {
         0 => Nrom::new(header, rom_sections),
         1 => Mmc1::new(header, rom_sections),
+        2 => Uxrom::new(header, rom_sections),
         66 => Gxrom::new(header, rom_sections),
         _ => unimplemented!("Mapper {:?}", mapper_num),
     }
