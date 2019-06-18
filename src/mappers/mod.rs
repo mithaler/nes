@@ -117,24 +117,25 @@ pub fn test_mapper(prg_rom: &[u8], chr_rom: &[u8]) -> Mapper {
 #[cfg(test)]
 mod tests {
     use super::NametableMirror;
+    use crate::mappers::Resolver;
 
     #[test]
     fn test_horizontal_mirroring() {
         let mirror = NametableMirror::Horizontal;
-        assert_eq!(mirror.mirrored_addr(0x2000), 0x2000);
-        assert_eq!(mirror.mirrored_addr(0x2300), 0x2300);
-        assert_eq!(mirror.mirrored_addr(0x24A0), 0x20A0);
-        assert_eq!(mirror.mirrored_addr(0x284B), 0x284B);
-        assert_eq!(mirror.mirrored_addr(0x2D20), 0x2920);
+        assert_eq!(mirror.resolve_addr(0x2000), 0x2000);
+        assert_eq!(mirror.resolve_addr(0x2300), 0x2300);
+        assert_eq!(mirror.resolve_addr(0x24A0), 0x20A0);
+        assert_eq!(mirror.resolve_addr(0x284B), 0x284B);
+        assert_eq!(mirror.resolve_addr(0x2D20), 0x2920);
     }
 
     #[test]
     fn test_vertical_mirroring() {
         let mirror = NametableMirror::Vertical;
-        assert_eq!(mirror.mirrored_addr(0x2000), 0x2000);
-        assert_eq!(mirror.mirrored_addr(0x2300), 0x2300);
-        assert_eq!(mirror.mirrored_addr(0x24A0), 0x24A0);
-        assert_eq!(mirror.mirrored_addr(0x284B), 0x204B);
-        assert_eq!(mirror.mirrored_addr(0x2D20), 0x2520);
+        assert_eq!(mirror.resolve_addr(0x2000), 0x2000);
+        assert_eq!(mirror.resolve_addr(0x2300), 0x2300);
+        assert_eq!(mirror.resolve_addr(0x24A0), 0x24A0);
+        assert_eq!(mirror.resolve_addr(0x284B), 0x204B);
+        assert_eq!(mirror.resolve_addr(0x2D20), 0x2520);
     }
 }
