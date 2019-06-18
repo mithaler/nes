@@ -8,6 +8,10 @@ mod nrom;  // 0
 mod mmc1;  // 1
 mod gxrom;  // 66
 
+pub const fn kb(num: u16) -> usize {
+    (num * 0x400) as usize
+}
+
 pub type Mapper = Shared<Mapping>;
 
 pub struct HeaderAttributes {
@@ -63,7 +67,8 @@ pub trait Resolver {
 #[derive(Debug)]
 pub enum NametableMirror {
     Horizontal,
-    Vertical
+    Vertical,
+    Single(u16)  // offset
 }
 
 impl Resolver for NametableMirror {
@@ -82,6 +87,11 @@ impl Resolver for NametableMirror {
                     0x2800 ... 0x2BFF | 0x2C00 ... 0x2FFF => addr & 0b1111_0111_1111_1111,
                     _ => unreachable!("nametable addr {:0X?}", addr),
                 }
+            },
+            NametableMirror::Single(offset) => {
+                // we only care about position within the single nametable
+                let position = addr & 0x03FF;
+                position + 0x2000 + *offset
             }
         })
     }

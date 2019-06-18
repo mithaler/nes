@@ -2,7 +2,7 @@
 
 use crate::common::{Shared, shared};
 use crate::memory::{Mem, mem, initialized_mem};
-use crate::mappers::{NametableMirror, HeaderAttributes, Mapping, Resolver};
+use crate::mappers::{NametableMirror, HeaderAttributes, Mapping, Resolver, kb};
 
 const SHIFT_REGISTER_INITIAL: u8 = 0b0001_0000;
 
@@ -15,21 +15,21 @@ enum PrgBankMode {
 
 impl Resolver for PrgBankMode {
     fn resolve_addr(&self, addr: u16) -> usize {
-        let resolved = addr as usize - 0x8000;
+        let resolved = addr as usize - kb(32);
         match self {
-            PrgBankMode::Whole(bank) => resolved + (0x8000 * bank),
+            PrgBankMode::Whole(bank) => resolved + (kb(32) * *bank),
             PrgBankMode::FirstFixed(bank) => {
-                if resolved < 0x4000 {
+                if resolved < kb(16) {
                     resolved
                 } else {
-                    resolved + bank * 0x4000
+                    resolved + bank * kb(16)
                 }
             },
             PrgBankMode::LastFixed(bank, count) => {
-                if resolved < 0x4000 {
-                    resolved + bank * 0x4000
+                if resolved < kb(16) {
+                    resolved + bank * kb(16)
                 } else {
-                    resolved + (count - 1) * 0x4000
+                    resolved + (count - 1) * kb(16)
                 }
             }
         }
@@ -46,11 +46,11 @@ impl Resolver for ChrBankMode {
     fn resolve_addr(&self, addr: u16) -> usize {
         let resolved = addr as usize;
         match self {
-            ChrBankMode::Whole(bank) => resolved + (bank * 0x2000),
+            ChrBankMode::Whole(bank) => resolved + (bank * kb(8)),
             ChrBankMode::Separate(bank0, bank1) => {
                 match addr {
-                    0x0 ... 0x0FFF => resolved + (bank0 * 0x2000),
-                    0x1000 ... 0x1FFF => resolved + (bank1 * 0x2000),
+                    0x0 ... 0x0FFF => resolved + (bank0 * kb(8)),
+                    0x1000 ... 0x1FFF => resolved + (bank1 * kb(8)),
                     _ => unreachable!()
                 }
             }
@@ -72,17 +72,17 @@ pub struct Mmc1 {
 impl Mmc1 {
     pub fn new(header: &[u8], rom_sections: &[u8]) -> Shared<Mmc1> {
         let attrs = HeaderAttributes::from_headers(header);
-        let prg_rom = mem(&rom_sections[0 .. attrs.prg_rom_size * 0x4000]);
+        let prg_rom = mem(&rom_sections[0 .. attrs.prg_rom_size * kb(16)]);
 
         let chr_rom = if attrs.chr_rom_size > 0 {
-            mem(&rom_sections[attrs.prg_rom_size * 0x4000 .. (attrs.prg_rom_size * 0x4000) + attrs.chr_rom_size * 0x2000])
+            mem(&rom_sections[attrs.prg_rom_size * kb(16) .. (attrs.prg_rom_size * kb(16)) + attrs.chr_rom_size * kb(8)])
         } else {
             // CHR RAM (assumes INES format!)
             initialized_mem(0x2000)
         };
 
         let prg_ram = match attrs.prg_ram {
-            true => Some(initialized_mem(0x2000)),
+            true => Some(initialized_mem(kb(8))),
             false => None
         };
 
@@ -93,18 +93,19 @@ impl Mmc1 {
             prg_rom,
             chr_rom,
             prg_ram,
-            internal_vram: initialized_mem(0x1000),
+            internal_vram: initialized_mem(kb(4)),
             nametable_mirror: attrs.nametable_mirror
         })
     }
 
     fn mirrored_addr(&self, addr: u16) -> usize {
-        self.nametable_mirror.resolve_addr(addr) - 0x2000
+        self.nametable_mirror.resolve_addr(addr) - kb(8)
     }
 
     fn control_register(&mut self, value: u8) {
         self.nametable_mirror = match value & 0b0000_0011 {
-            0 | 1 => unimplemented!("single screen mirroring"),
+            0 => NametableMirror::Single(0),
+            1 => NametableMirror::Single(0x800),
             2 => NametableMirror::Vertical,
             3 => NametableMirror::Horizontal,
             _ => unreachable!()
@@ -112,7 +113,7 @@ impl Mmc1 {
         self.prg_bank_mode = match (value >> 2) & 0b0000_0011 {
             0 | 1 => PrgBankMode::Whole(0),
             2 => PrgBankMode::FirstFixed(0),
-            3 => PrgBankMode::LastFixed(0, (self.prg_rom.len() / 0x4000) - 1),
+            3 => PrgBankMode::LastFixed(0, (self.prg_rom.len() / kb(16)) - 1),
             _ => unreachable!()
         };
         self.chr_bank_mode = match (value >> 4) & 0b0000_0001 {
