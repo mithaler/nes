@@ -9,24 +9,24 @@ const SHIFT_REGISTER_INITIAL: u8 = 0b0001_0000;
 
 #[derive(Debug)]
 enum PrgBankMode {
-    Whole(usize),
-    FirstFixed(usize),
-    LastFixed(usize, usize)  // selected bank, total count of banks
+    Whole,
+    FirstFixed,
+    LastFixed(usize)  // total count of banks
 }
 
-impl Resolver for PrgBankMode {
-    fn resolve_addr(&self, addr: u16) -> usize {
+impl PrgBankMode {
+    fn resolve_addr(&self, bank: usize, addr: u16) -> usize {
         let resolved = addr as usize - kb(32);
         match self {
-            PrgBankMode::Whole(bank) => resolved + (kb(32) * *bank),
-            PrgBankMode::FirstFixed(bank) => {
+            PrgBankMode::Whole => resolved + (kb(32) * (bank & 0b1111_1110)),
+            PrgBankMode::FirstFixed => {
                 if resolved < kb(16) {
                     resolved
                 } else {
                     resolved + bank * kb(16)
                 }
             },
-            PrgBankMode::LastFixed(bank, count) => {
+            PrgBankMode::LastFixed(count) => {
                 if resolved < kb(16) {
                     resolved + bank * kb(16)
                 } else {
@@ -39,16 +39,16 @@ impl Resolver for PrgBankMode {
 
 #[derive(Debug)]
 enum ChrBankMode {
-    Whole(usize),
-    Separate(usize, usize)
+    Whole,
+    Separate
 }
 
-impl Resolver for ChrBankMode {
-    fn resolve_addr(&self, addr: u16) -> usize {
+impl ChrBankMode {
+    fn resolve_addr(&self, bank0: usize, bank1: usize, addr: u16) -> usize {
         let resolved = addr as usize;
         match self {
-            ChrBankMode::Whole(bank) => resolved + (bank * kb(8)),
-            ChrBankMode::Separate(bank0, bank1) => {
+            ChrBankMode::Whole => resolved + ((bank0 & 0b1111_1110) * kb(8)),
+            ChrBankMode::Separate => {
                 match addr {
                     0x0 ... 0x0FFF => resolved + (bank0 * kb(8)),
                     0x1000 ... 0x1FFF => resolved + (bank1 * kb(8)),
@@ -60,7 +60,10 @@ impl Resolver for ChrBankMode {
 }
 
 pub struct Mmc1 {
+    selected_prg_bank: usize,
     prg_bank_mode: PrgBankMode,
+    selected_chr_bank_0: usize,
+    selected_chr_bank_1: usize,
     chr_bank_mode: ChrBankMode,
     shift_register: u8,
     prg_ram: Option<Mem>,
@@ -88,8 +91,11 @@ impl Mmc1 {
         };
 
         shared(Mmc1 {
-            prg_bank_mode: PrgBankMode::LastFixed(0, attrs.prg_rom_size - 1),
-            chr_bank_mode: ChrBankMode::Whole(0),
+            selected_prg_bank: 0,
+            prg_bank_mode: PrgBankMode::LastFixed(attrs.prg_rom_size - 1),
+            selected_chr_bank_0: 0,
+            selected_chr_bank_1: 0,
+            chr_bank_mode: ChrBankMode::Whole,
             shift_register: 0,
             prg_rom,
             chr_rom,
@@ -112,14 +118,14 @@ impl Mmc1 {
             _ => unreachable!()
         };
         self.prg_bank_mode = match (value >> 2) & 0b0000_0011 {
-            0 | 1 => PrgBankMode::Whole(0),
-            2 => PrgBankMode::FirstFixed(0),
-            3 => PrgBankMode::LastFixed(0, (self.prg_rom.len() / kb(16)) - 1),
+            0 | 1 => PrgBankMode::Whole,
+            2 => PrgBankMode::FirstFixed,
+            3 => PrgBankMode::LastFixed((self.prg_rom.len() / kb(16)) - 1),
             _ => unreachable!()
         };
         self.chr_bank_mode = match (value >> 4) & 0b0000_0001 {
-            0 => ChrBankMode::Whole(0),
-            1 => ChrBankMode::Separate(0, 0),
+            0 => ChrBankMode::Whole,
+            1 => ChrBankMode::Separate,
             _ => unreachable!()
         };
         debug!("MMC1 control: PRG {:?}, CHR {:?}, Nametable {:?}",
@@ -127,26 +133,21 @@ impl Mmc1 {
     }
 
     fn chr_bank_0(&mut self, value: usize) {
-        self.chr_bank_mode = match self.chr_bank_mode {
-            ChrBankMode::Whole(_) => ChrBankMode::Whole(value & 0b1111_1110),
-            ChrBankMode::Separate(_, bank1) => ChrBankMode::Separate(value, bank1)
-        };
-        debug!("Set MMC1 CHR mode: {:?}", self.chr_bank_mode);
+        self.selected_chr_bank_0 = value;
+        debug!("Set MMC1 CHR bank 0: {:?} {:?}", self.chr_bank_mode, self.selected_chr_bank_0);
     }
 
     fn chr_bank_1(&mut self, value: usize) {
-        match self.chr_bank_mode {
-            ChrBankMode::Whole(_) => {},
-            ChrBankMode::Separate(bank0, _) => self.chr_bank_mode = ChrBankMode::Separate(bank0, value)
-        };
-        debug!("Set MMC1 CHR mode: {:?}", self.chr_bank_mode);
+        self.selected_chr_bank_1 = value;
+        debug!("Set MMC1 CHR bank 1: {:?}", self.selected_chr_bank_1);
     }
 
     fn prg_bank(&mut self, value: usize) {
+        self.selected_prg_bank = value;
         self.prg_bank_mode = match self.prg_bank_mode {
-            PrgBankMode::Whole(_) => PrgBankMode::Whole(value & 0b1111_1110),
-            PrgBankMode::FirstFixed(_) => PrgBankMode::FirstFixed(value),
-            PrgBankMode::LastFixed(_, count) => PrgBankMode::LastFixed(value, count)
+            PrgBankMode::Whole => PrgBankMode::Whole,
+            PrgBankMode::FirstFixed => PrgBankMode::FirstFixed,
+            PrgBankMode::LastFixed(count) => PrgBankMode::LastFixed(count)
         };
         debug!("Set MMC1 PRG mode: {:?}", self.prg_bank_mode);
     }
@@ -183,7 +184,7 @@ impl Mapping for Mmc1 {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
             0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
             0x6000...0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize],
-            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(addr)]
+            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
     }
 
@@ -202,7 +203,7 @@ impl Mapping for Mmc1 {
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(addr)],
+            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)],
             0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
@@ -211,7 +212,7 @@ impl Mapping for Mmc1 {
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(addr)] = value,
+            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)] = value,
             0x2000 ... 0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value;
@@ -223,6 +224,7 @@ impl Mapping for Mmc1 {
 }
 
 pub struct Uxrom {
+    selected_prg_bank: usize,
     prg_bank_mode: PrgBankMode,  // always LastFixed!
     prg_ram: Option<Mem>,
     prg_rom: Mem,
@@ -249,7 +251,8 @@ impl Uxrom {
         };
 
         shared(Uxrom {
-            prg_bank_mode: PrgBankMode::LastFixed(0, attrs.prg_rom_size - 1),
+            selected_prg_bank: 0,
+            prg_bank_mode: PrgBankMode::LastFixed(attrs.prg_rom_size - 1),
             prg_rom,
             chr_rom,
             prg_ram,
@@ -259,8 +262,10 @@ impl Uxrom {
     }
 
     fn set_bank_mode(&mut self, value: u8) {
-        if let PrgBankMode::LastFixed(_, count) = self.prg_bank_mode {
-            self.prg_bank_mode = PrgBankMode::LastFixed(value as usize, count);
+        if let PrgBankMode::LastFixed(count) = self.prg_bank_mode {
+            self.prg_bank_mode = PrgBankMode::LastFixed(count);
+        } else {
+            unreachable!("Somehow UxROM isn't in LastFixed mode!?")
         }
     }
 
@@ -275,7 +280,7 @@ impl Mapping for Uxrom {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
             0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
             0x6000...0x7FFF => self.prg_ram.as_ref().map_or(0, |ram| ram[(addr - 0x6000) as usize]),
-            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(addr)]
+            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
     }
 
