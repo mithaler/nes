@@ -82,8 +82,8 @@ pub enum SweepNegator {
 impl SweepNegator {
     fn add(&self, current_period: u16, shifted: u16) -> u16 {
         match self {
-            SweepNegator::Pulse1 => current_period - shifted - 1,
-            SweepNegator::Pulse2 => current_period - shifted,
+            SweepNegator::Pulse1 => current_period.wrapping_sub(shifted).wrapping_sub(1),
+            SweepNegator::Pulse2 => current_period.wrapping_sub(shifted),
         }
     }
 }
