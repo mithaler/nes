@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub const CLOCKS_PER_FRAME: u16 = 29780;
-pub const SAMPLES_PER_FRAME: u16 = 735; // 44100 Hz / 60 FPS
+pub const CLOCKS_PER_FRAME: f32 = 29780f32;
+pub const SAMPLES_PER_FRAME: f32 = 735f32; // 44100 Hz / 60 FPS
 
 /// A heap-allocated, mutably shared object. Currently assumes the application is
 /// single-threaded; the underlying implementation of how this is shared will change

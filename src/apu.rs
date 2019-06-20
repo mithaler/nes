@@ -1,14 +1,18 @@
 use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME};
 
-const SAMPLE_RATE: u16 = CLOCKS_PER_FRAME / SAMPLES_PER_FRAME / 2;
+const SAMPLE_RATE: f32 = (CLOCKS_PER_FRAME / SAMPLES_PER_FRAME / 2.0) - 1f32;
+const LENGTH_COUNTER_TABLE: [u8; 32] = [
+    10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,  // 00 - 0F
+    12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30   // 10 - 1F
+];
 
 bitflags! {
     struct EnabledChannels: u8 {
-        const PULSE_1 = 0b0000_0001;
-        const PULSE_2 = 0b0000_0010;
+        const PULSE_1 =  0b0000_0001;
+        const PULSE_2 =  0b0000_0010;
         const TRIANGLE = 0b0000_0100;
-        const NOISE = 0b0000_1000;
-        const DMC = 0b0001_0000;
+        const NOISE =    0b0000_1000;
+        const DMC =      0b0001_0000;
     }
 }
 bitflags! {
@@ -21,6 +25,29 @@ bitflags! {
 trait Channel: Clocked {
     fn set_register(&mut self, addr: u16, value: u8);
     fn sample(&mut self) -> Option<f32>;
+}
+
+struct LengthCounter {
+    length: u8,
+    halt: bool
+}
+
+impl Clocked for LengthCounter {
+    fn tick(&mut self) {
+        if !self.halt && self.length > 0 {
+            self.length -= 1;
+        }
+    }
+}
+
+impl LengthCounter {
+    fn new() -> LengthCounter {
+        LengthCounter { length: 0, halt: false }
+    }
+
+    fn silenced(&self) -> bool {
+        self.halt && self.length == 0
+    }
 }
 
 struct Envelope {
@@ -107,6 +134,7 @@ impl Duty {
 struct Pulse {
     duty: Duty,
     envelope: Envelope,
+    length_counter: LengthCounter,
     step: u8,
     timer: u16,
     period: u16,
@@ -117,6 +145,7 @@ impl Pulse {
         Pulse {
             duty: Duty::Eighth,
             envelope: Envelope::new(),
+            length_counter: LengthCounter::new(),
             step: 0,
             timer: 0,
             period: 0
@@ -135,12 +164,14 @@ impl Channel for Pulse {
                     3 => Duty::ThreeFourths,
                     _ => unreachable!()
                 };
+                self.length_counter.halt = (value & 0b0010_0000) == 0;
                 self.envelope.set_register(addr, value);
             },
             1 => {},
             2 => {self.period = self.period & 0xFF00 | value as u16},
             3 => {
                 self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8);
+                self.length_counter.length = LENGTH_COUNTER_TABLE[usize::from(value >> 3)];
                 self.envelope.start = true;
                 self.step = 0;
             },
@@ -149,7 +180,7 @@ impl Channel for Pulse {
     }
 
     fn sample(&mut self) -> Option<f32> {
-        if self.duty.active(self.step) {
+        if !self.length_counter.silenced() && self.duty.active(self.step) {
             self.envelope.sample()
         } else {
             None
@@ -170,7 +201,7 @@ impl Clocked for Pulse {
 
 pub struct Apu {
     cycle: u16,
-    sample_step: u16,
+    sample_step: f32,
     samples: Vec<f32>,
     pulse1: Pulse,
     pulse2: Pulse,
@@ -182,7 +213,7 @@ impl Apu {
     pub fn new() -> Shared<Apu> {
         shared(Apu {
             cycle: 0,
-            sample_step: 0,
+            sample_step: 0f32,
             samples: Vec::with_capacity(SAMPLES_PER_FRAME as usize),
             pulse1: Pulse::new(),
             pulse2: Pulse::new(),
@@ -191,11 +222,21 @@ impl Apu {
         })
     }
 
+    fn set_enabled_flags(&mut self, value: u8) {
+        self.enabled = EnabledChannels::from_bits_truncate(value);
+        if !self.enabled.contains(EnabledChannels::PULSE_1) {
+            self.pulse1.length_counter.length = 0;
+        }
+        if !self.enabled.contains(EnabledChannels::PULSE_2) {
+            self.pulse2.length_counter.length = 0;
+        }
+    }
+
     pub fn set_register(&mut self, addr: u16, value: u8) {
         match addr {
             0x4000 ... 0x4003 => self.pulse1.set_register(addr, value),
             0x4004 ... 0x4007 => self.pulse2.set_register(addr, value),
-            0x4015 => self.enabled = EnabledChannels::from_bits_truncate(value),
+            0x4015 => self.set_enabled_flags(value),
             0x4017 => self.frame_counter = FrameCounter::from_bits_truncate(value),
             _ => warn!("Unimplemented APU register: {:04X} -> {:02X}", addr, value)
         }
@@ -227,7 +268,8 @@ impl Apu {
 
     fn clock_channels(&mut self, half_frame: bool) {
         if half_frame {
-            // clock length counters
+            self.pulse1.length_counter.tick();
+            self.pulse2.length_counter.tick();
             // clock sweep units
         }
         self.pulse1.envelope.tick();
@@ -268,11 +310,11 @@ impl Clocked for Apu {
             _ => {}
         }
         if (self.cycle & 1) == 0 {
-            if self.sample_step == 0 {
+            if self.sample_step <= 0f32 {
                 self.sample();
                 self.sample_step += SAMPLE_RATE;
             } else {
-                self.sample_step -= 1;
+                self.sample_step -= 1f32;
             }
         }
         self.cycle += 1;

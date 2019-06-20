@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<Error>> {
     canvas.clear();
 
     let audio_spec = AudioSpecDesired {
-        samples: Some(SAMPLES_PER_FRAME),
+        samples: Some(SAMPLES_PER_FRAME as u16),
         channels: Some(1),
         freq: Some(44100) // Hz
     };
