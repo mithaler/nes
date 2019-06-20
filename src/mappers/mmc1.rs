@@ -262,11 +262,7 @@ impl Uxrom {
     }
 
     fn set_bank_mode(&mut self, value: u8) {
-        if let PrgBankMode::LastFixed(count) = self.prg_bank_mode {
-            self.prg_bank_mode = PrgBankMode::LastFixed(count);
-        } else {
-            unreachable!("Somehow UxROM isn't in LastFixed mode!?")
-        }
+        self.selected_prg_bank = value as usize;
     }
 
     fn mirrored_addr(&self, addr: u16) -> usize {
