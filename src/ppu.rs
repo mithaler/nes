@@ -465,6 +465,7 @@ mod tests {
     use crate::mappers::test_mapper;
     use crate::memory::{CpuMem, PpuMem};
     use crate::cpu::Cpu;
+    use crate::apu::Apu;
 
     const LEFT: [u8; 8] = [0x41, 0xC2, 0x44, 0x48, 0x10, 0x20, 0x40, 0x80];
     const RIGHT: [u8; 8] = [0x01, 0x02, 0x04, 0x08, 0x16, 0x21, 0x42, 0x87];
@@ -495,7 +496,7 @@ mod tests {
     fn test_ppu() -> (Shared<PpuMem>, Ppu) {
         let mapper = test_mapper(&[], test_pattern().as_slice());
         let ppu_mem = shared(PpuMem::new(mapper.clone()));
-        let bus = Bus::new(ppu_mem.clone(), shared(Controllers::new()));
+        let bus = Bus::new(Apu::new(), ppu_mem.clone(), shared(Controllers::new()));
         let cpu = shared(Cpu::new(Box::new(CpuMem::new(mapper.clone(), bus)), true));
         (ppu_mem.clone(), Ppu::new(ppu_mem.clone(), cpu))
     }

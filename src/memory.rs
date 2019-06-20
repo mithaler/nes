@@ -233,10 +233,11 @@ mod tests {
         use crate::controllers::Controllers;
         use crate::memory::*;
         use crate::mappers::{Mapper, test_mapper};
+        use crate::apu::Apu;
 
         fn test_mem() -> (CpuMem, Mapper) {
             let mapper = test_mapper(TEST_MEM, &[]);
-            let bus = Bus::new(shared(PpuMem::new(mapper.clone())), shared(Controllers::new()));
+            let bus = Bus::new(Apu::new(), shared(PpuMem::new(mapper.clone())), shared(Controllers::new()));
             (CpuMem::new(mapper.clone(), bus), mapper.clone())
         }
 

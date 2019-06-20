@@ -193,13 +193,13 @@ impl Apu {
     fn sample(&mut self) {
         // https://wiki.nesdev.com/w/index.php/APU_Mixer
         let pulse_1 = match self.enabled.contains(EnabledChannels::PULSE_1) {
-            true => self.pulse1.sample().unwrap_or(0f32),
-            false => 0f32
-        };
+            true => self.pulse1.sample(),
+            false => None
+        }.unwrap_or(0f32);
         let pulse_2 = match self.enabled.contains(EnabledChannels::PULSE_2) {
-            true => self.pulse2.sample().unwrap_or(0f32),
-            false => 0f32
-        };
+            true => self.pulse2.sample(),
+            false => None
+        }.unwrap_or(0f32);
         let triangle = 0f32;
         let noise = 0f32;
         let dmc = 0f32;
