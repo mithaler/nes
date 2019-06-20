@@ -43,8 +43,8 @@ impl Apu {
             cycle: 0,
             sample_step: 0f32,
             samples: Vec::with_capacity(SAMPLES_PER_FRAME as usize),
-            pulse1: Pulse::new(),
-            pulse2: Pulse::new(),
+            pulse1: Pulse::default(),
+            pulse2: Pulse::default(),
             enabled: EnabledChannels::empty(),
             frame_counter: FrameCounter::empty(),
         })

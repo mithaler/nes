@@ -6,6 +6,7 @@ pub const LENGTH_COUNTER_TABLE: [u8; 32] = [
     12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30   // 10 - 1F
 ];
 
+#[derive(Default)]
 pub struct LengthCounter {
     pub length: u8,
     pub halt: bool
@@ -20,15 +21,12 @@ impl Clocked for LengthCounter {
 }
 
 impl LengthCounter {
-    pub fn new() -> LengthCounter {
-        LengthCounter { length: 0, halt: false }
-    }
-
     pub fn silenced(&self) -> bool {
         self.halt && self.length == 0
     }
 }
 
+#[derive(Default)]
 pub struct Envelope {
     pub start: bool,
     looping: bool,
@@ -36,19 +34,6 @@ pub struct Envelope {
     decay: u8,
     value: u8,
     current: u8
-}
-
-impl Envelope {
-    pub fn new() -> Envelope {
-        Envelope {
-            start: false,
-            looping: false,
-            constant: false,
-            decay: 0,
-            value: 0,
-            current: 0,
-        }
-    }
 }
 
 impl Clocked for Envelope {

@@ -24,6 +24,13 @@ impl Duty {
     }
 }
 
+impl Default for Duty {
+    fn default() -> Self {
+        Duty::Eighth
+    }
+}
+
+#[derive(Default)]
 pub struct Pulse {
     duty: Duty,
     step: u8,
@@ -32,19 +39,6 @@ pub struct Pulse {
 
     pub envelope: Envelope,
     pub length_counter: LengthCounter,
-}
-
-impl Pulse {
-    pub fn new() -> Pulse {
-        Pulse {
-            duty: Duty::Eighth,
-            envelope: Envelope::new(),
-            length_counter: LengthCounter::new(),
-            step: 0,
-            timer: 0,
-            period: 0
-        }
-    }
 }
 
 impl Channel for Pulse {
