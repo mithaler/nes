@@ -36,8 +36,8 @@ pub struct Pulse {
     timer: u16,
     period: u16,
 
+    sweep: Sweep,
     pub envelope: Envelope,
-    pub sweep: Sweep,
     pub length_counter: LengthCounter,
 }
 

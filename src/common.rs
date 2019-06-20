@@ -25,6 +25,10 @@ pub trait Addressable {
     }
 }
 
+pub trait Irq {
+    fn irq(&self) -> bool;
+}
+
 pub trait Clocked {
     fn tick(&mut self);
 }

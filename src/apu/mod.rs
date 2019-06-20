@@ -1,4 +1,4 @@
-use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME};
+use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME, Irq};
 use crate::apu::pulse::Pulse;
 use crate::apu::components::SweepNegator;
 
@@ -30,6 +30,7 @@ trait Channel: Clocked {
 
 pub struct Apu {
     cycle: u16,
+    irq: bool,
     sample_step: f32,
     samples: Vec<f32>,
     pulse1: Pulse,
@@ -42,6 +43,7 @@ impl Apu {
     pub fn new() -> Shared<Apu> {
         shared(Apu {
             cycle: 0,
+            irq: false,
             sample_step: 0f32,
             samples: Vec::with_capacity(SAMPLES_PER_FRAME as usize),
             pulse1: Pulse::new(SweepNegator::Pulse1),
@@ -120,7 +122,7 @@ impl Clocked for Apu {
             22371 => self.clock_channels(false),
             29828 => {
                 if self.frame_counter.bits() == 0 {
-                    // irq
+                    self.irq = true;
                 }
             },
             29829 => {
@@ -128,6 +130,7 @@ impl Clocked for Apu {
                     self.clock_channels(true);
                     self.cycle = 0;
                 }
+                self.irq = false;
             }
             37281 => {
                 if self.frame_counter.contains(FrameCounter::FIVE_STEP) {
@@ -146,5 +149,11 @@ impl Clocked for Apu {
             }
         }
         self.cycle += 1;
+    }
+}
+
+impl Irq for Apu {
+    fn irq(&self) -> bool {
+        self.irq
     }
 }

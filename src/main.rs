@@ -23,7 +23,7 @@ use simplelog::{Config, TermLogger};
 
 use crate::apu::Apu;
 use crate::bus::Bus;
-use crate::common::{Clocked, SAMPLES_PER_FRAME, shared, Shared};
+use crate::common::{Clocked, SAMPLES_PER_FRAME, shared, Shared, Irq};
 use crate::controllers::Controllers;
 use crate::cpu::Cpu;
 use crate::mappers::mapper;
@@ -140,6 +140,7 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => running = false,
+                Event::KeyDown { keycode: Some(Keycode::F7), .. } => context.cpu.borrow_mut().reset(),
                 Event::KeyDown { keycode: Some(Keycode::Backquote), .. } => turbo = true,
                 Event::KeyUp { keycode: Some(Keycode::Backquote), .. } => turbo = false,
                 Event::KeyDown { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
@@ -169,6 +170,11 @@ fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>
         if (i % 3) == 0 {
             context.cpu.borrow_mut().tick();
             context.apu.borrow_mut().tick();
+
+            if context.apu.borrow().irq() {
+                // I think this is wrong; really this should be setting a flag for next cycle
+                context.cpu.borrow_mut().irq();
+            }
         }
         context.ppu.tick();
     }
