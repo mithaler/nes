@@ -156,9 +156,8 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
 
         if !turbo {
             let after = Instant::now();
-            match TARGET_DURATION.checked_sub(after - before) {
-                Some(to_sleep) => sleep(to_sleep),
-                None => {},
+            if let Some(to_sleep) = TARGET_DURATION.checked_sub(after - before) {
+                sleep(to_sleep);
             }
         }
     }
