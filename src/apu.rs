@@ -108,6 +108,7 @@ struct Pulse {
     duty: Duty,
     envelope: Envelope,
     step: u8,
+    timer: u16,
     period: u16,
 }
 
@@ -117,6 +118,7 @@ impl Pulse {
             duty: Duty::Eighth,
             envelope: Envelope::new(),
             step: 0,
+            timer: 0,
             period: 0
         }
     }
@@ -126,7 +128,7 @@ impl Channel for Pulse {
     fn set_register(&mut self, addr: u16, value: u8) {
         match addr & 0b0000_0011 {
             0 => {
-                self.duty = match (value & 0b1100_0000).rotate_left(2) {
+                self.duty = match value >> 6 {
                     0 => Duty::Eighth,
                     1 => Duty::Fourth,
                     2 => Duty::Half,
@@ -137,7 +139,11 @@ impl Channel for Pulse {
             },
             1 => {},
             2 => {self.period = self.period & 0xFF00 | value as u16},
-            3 => {self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8)},
+            3 => {
+                self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8);
+                self.envelope.start = true;
+                self.step = 0;
+            },
             _ => unreachable!()
         }
     }
@@ -153,7 +159,12 @@ impl Channel for Pulse {
 
 impl Clocked for Pulse {
     fn tick(&mut self) {
-        self.step = self.step.wrapping_sub(1) & 0b0000_0111;
+        if self.timer == 0 {
+            self.step = self.step.wrapping_sub(1) & 0b0000_0111;
+            self.timer = self.period;
+        } else {
+            self.timer -= 1;
+        }
     }
 }
 
