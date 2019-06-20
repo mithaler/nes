@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use clap::{App, Arg};
 use log::LevelFilter;
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
@@ -20,14 +21,16 @@ use sdl2::render::{Canvas, Texture, TextureAccess};
 use sdl2::video::Window;
 use simplelog::{Config, TermLogger};
 
+use crate::apu::Apu;
 use crate::bus::Bus;
-use crate::common::{Clocked, shared, Shared};
+use crate::common::{Clocked, SAMPLES_PER_FRAME, shared, Shared};
 use crate::controllers::Controllers;
 use crate::cpu::Cpu;
 use crate::mappers::mapper;
 use crate::memory::{CpuMem, Mem, PpuMem};
 use crate::ppu::Ppu;
 
+mod apu;
 mod bus;
 mod cpu;
 mod common;
@@ -45,7 +48,9 @@ struct Context<'a> {
     cpu: Shared<Cpu>,
     controllers: Shared<Controllers>,
     texture: Texture<'a>,
+    audio_queue: AudioQueue<f32>,
     ppu: Ppu,
+    apu: Shared<Apu>,
     event_pump: EventPump
 }
 
@@ -83,8 +88,9 @@ fn main() -> Result<(), Box<Error>> {
 
     let controllers = shared(Controllers::new());
     let mapper = mapper(header, rom_sections);
+    let apu = Apu::new();
     let ppu_mem = shared(PpuMem::new(mapper.clone()));
-    let bus = Bus::new(ppu_mem.clone(), controllers.clone());
+    let bus = Bus::new(apu.clone(), ppu_mem.clone(), controllers.clone());
     let cpu_mem = Box::new(CpuMem::new(mapper, bus));
 
     let cpu = shared(Cpu::new(cpu_mem, matches.is_present("test_mode")));
@@ -112,7 +118,15 @@ fn main() -> Result<(), Box<Error>> {
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     canvas.clear();
 
-    let mut context = Context {event_pump, texture, cpu, ppu, controllers, canvas};
+    let audio_spec = AudioSpecDesired {
+        samples: Some(SAMPLES_PER_FRAME),
+        channels: Some(1),
+        freq: Some(44100) // Hz
+    };
+    let audio_queue = sdl_context.audio()?.open_queue(None, &audio_spec)?;
+    audio_queue.resume();
+
+    let mut context = Context {event_pump, texture, canvas, audio_queue, cpu, ppu, apu, controllers};
     frame_loop(&mut context)
 }
 
@@ -155,10 +169,17 @@ fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>
     for i in 0..ppu_cycles {
         if (i % 3) == 0 {
             context.cpu.borrow_mut().tick();
+            context.apu.borrow_mut().tick();
         }
         context.ppu.tick();
     }
 
+    {
+        let mut apu = context.apu.borrow_mut();
+        let mut samples = apu.samples();
+        context.audio_queue.queue(samples);
+        samples.clear();
+    }
     context.texture.update(None, context.ppu.frame(), (WIDTH * 3) as usize)?;
     context.canvas.copy(&context.texture, None, None)?;
     context.canvas.present();

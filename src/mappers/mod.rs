@@ -34,10 +34,6 @@ impl HeaderAttributes {
                 false => NametableMirror::Horizontal
             }
         };
-        info!("{} ROM", match (header[7] & 0b0000_1100) == 0b0000_1100 {
-            true => "NES 2.0",
-            false => "INES"
-        });
         info!(
             "PRG ROM: 0x{:X?}, CHR ROM: 0x{:X?}, CHR RAM: 0x{:X?}, contains PRG RAM: {:?}, nametable mirroring: {:?}",
             attrs.prg_rom_size * 0x4000,
@@ -103,7 +99,11 @@ impl Resolver for NametableMirror {
 
 pub fn mapper(header: &[u8], rom_sections: &[u8]) -> Mapper {
     let mapper_num = header[7] & 0b1111_0000 | ((header[6] & 0b1111_0000) >> 4);
-    info!("Mapper number: {:?}", mapper_num);
+    let rom_type = match (header[7] & 0b0000_1100) == 0b0000_1100 {
+        true => "NES 2.0",
+        false => "INES"
+    };
+    info!("{} ROM, Mapper number: {:?}", rom_type, mapper_num);
     match mapper_num {
         0 => Nrom::new(header, rom_sections),
         1 => Mmc1::new(header, rom_sections),

@@ -1,4 +1,5 @@
 use crate::common::{Addressable, Shared, shared, join_bytes};
+use crate::apu::Apu;
 use crate::controllers::Controllers;
 use crate::memory::PpuMem;
 
@@ -18,6 +19,7 @@ pub struct Bus {
     ppu_write_addr: u16,
     ppudata_read_buffer: u8,
 
+    apu: Shared<Apu>,
     ppu_mem: Shared<PpuMem>,
     controllers: Shared<Controllers>
 }
@@ -25,7 +27,7 @@ pub struct Bus {
 use AddressLatchStatus::*;
 
 impl Bus {
-    pub fn new(ppu_mem: Shared<PpuMem>, controllers: Shared<Controllers>) -> CpuBus {
+    pub fn new(apu: Shared<Apu>, ppu_mem: Shared<PpuMem>, controllers: Shared<Controllers>) -> CpuBus {
         shared(Bus {
             oamaddr: 0,
 
@@ -34,6 +36,7 @@ impl Bus {
             ppu_write_addr: 0,
             ppudata_read_buffer: 0,
 
+            apu,
             ppu_mem,
             controllers
         })
@@ -132,6 +135,8 @@ impl Bus {
             0x2006 => panic!("PPUADDR not readable by CPU!"),
             0x2007 => self.get_ppudata(),
 
+            0x4000 ... 0x4013 => panic!("APU registers not readable by CPU!"),
+
             0x4016 => self.controllers.borrow_mut().report_controller_1(),
             0x4017 => self.controllers.borrow_mut().report_controller_2(),
 
@@ -150,6 +155,8 @@ impl Bus {
             0x2005 => self.set_ppuscroll(value),
             0x2006 => self.set_ppuaddr(value),
             0x2007 => self.set_ppudata(value),
+
+            0x4000 ... 0x4013 | 0x4015 | 0x4017 => self.apu.borrow_mut().set_register(register, value),
 
             0x4014 => panic!("Don't write to $4014, call set_oamdma instead!"),
             0x4016 => self.controllers.borrow_mut().set_polling(if value != 0 {true} else {false}),

@@ -23,7 +23,7 @@ impl Nrom {
     pub fn new(header: &[u8], rom_sections: &[u8]) -> Shared<Nrom> {
         let attrs = HeaderAttributes::from_headers(header);
 
-        let (rom_size, prg_rom, mut chr_rom) = match attrs.prg_rom_size {
+        let (rom_size, prg_rom, chr_rom) = match attrs.prg_rom_size {
             1 => (
                 RomSize::Sixteen,
                 &rom_sections[0..0x4000],
