@@ -125,7 +125,6 @@ impl Sweep {
         self.negate = (value & 0b0000_1000) != 0;
         self.divider_period = ((value & 0b0111_0000) >> 4) + 1;
         self.shift_count = (value & 0b0000_0111) as u16;
-        info!("Sweep: {:?}", self);
     }
 
     pub fn silenced(&self) -> bool {
