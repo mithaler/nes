@@ -175,7 +175,7 @@ fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>
 
     {
         let mut apu = context.apu.borrow_mut();
-        let mut samples = apu.samples();
+        let samples = apu.samples();
         context.audio_queue.queue(samples);
         samples.clear();
     }

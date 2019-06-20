@@ -1,5 +1,6 @@
 use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::apu::pulse::Pulse;
+use crate::apu::components::SweepNegator;
 
 mod components;
 mod pulse;
@@ -43,8 +44,8 @@ impl Apu {
             cycle: 0,
             sample_step: 0f32,
             samples: Vec::with_capacity(SAMPLES_PER_FRAME as usize),
-            pulse1: Pulse::default(),
-            pulse2: Pulse::default(),
+            pulse1: Pulse::new(SweepNegator::Pulse1),
+            pulse2: Pulse::new(SweepNegator::Pulse2),
             enabled: EnabledChannels::empty(),
             frame_counter: FrameCounter::empty(),
         })
@@ -96,9 +97,8 @@ impl Apu {
 
     fn clock_channels(&mut self, half_frame: bool) {
         if half_frame {
-            self.pulse1.length_counter.tick();
-            self.pulse2.length_counter.tick();
-            // clock sweep units
+            self.pulse1.clock_half_frame();
+            self.pulse2.clock_half_frame();
         }
         self.pulse1.envelope.tick();
         self.pulse2.envelope.tick();
