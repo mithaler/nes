@@ -1,6 +1,6 @@
 use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME};
 
-const SAMPLE_RATE: u16 = CLOCKS_PER_FRAME / SAMPLES_PER_FRAME;
+const SAMPLE_RATE: u16 = CLOCKS_PER_FRAME / SAMPLES_PER_FRAME / 2;
 
 bitflags! {
     struct EnabledChannels: u8 {
