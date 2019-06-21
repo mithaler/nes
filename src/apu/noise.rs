@@ -41,9 +41,10 @@ impl Channel for Noise {
     fn set_register(&mut self, addr: u16, value: u8) {
         match addr {
             0x400C => {
-                self.length_counter.halt = (value & 0b0010_0000) == 0;
+                self.length_counter.halt = (value & 0b0010_0000) != 0;
                 self.envelope.set_register(addr, value);
             },
+            // 0x400D doesn't do anything
             0x400E => {
                 self.mode = (value & 0b1000_0000) != 0;
                 self.period = PERIOD_TABLE[(value & 0b0000_1111) as usize]

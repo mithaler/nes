@@ -71,6 +71,9 @@ impl Apu {
         if !self.enabled.contains(EnabledChannels::PULSE_2) {
             self.pulse2.length_counter.length = 0;
         }
+        if !self.enabled.contains(EnabledChannels::NOISE) {
+            self.noise.length_counter.length = 0;
+        }
     }
 
     pub fn set_register(&mut self, addr: u16, value: u8) {

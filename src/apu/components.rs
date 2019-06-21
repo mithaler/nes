@@ -32,7 +32,7 @@ impl LengthCounter {
 
 impl Silencer for LengthCounter {
     fn silenced(&self) -> bool {
-        self.halt && self.length == 0
+        self.length == 0
     }
 }
 

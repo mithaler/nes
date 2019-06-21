@@ -15,6 +15,8 @@ pub struct Triangle {
     period_position: u16,
     sequence_step: usize,
     control: bool,
+
+    // For simplicity, I built this in instead of making a separate struct
     linear_counter_reload: bool,
     linear_counter_reload_value: u8,
     linear_counter_value: u8,
@@ -67,6 +69,7 @@ impl Channel for Triangle {
                 self.linear_counter_reload_value = value & 0b0111_1111;
                 self.linear_counter_reload = true;
             },
+            // 0x4009 doesn't do anything
             0x400A => self.period = self.period & 0xFF00 | value as u16,
             0x400B => {
                 self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8);

@@ -72,7 +72,7 @@ impl Channel for Pulse {
                     3 => Duty::ThreeFourths,
                     _ => unreachable!()
                 };
-                self.length_counter.halt = (value & 0b0010_0000) == 0;
+                self.length_counter.halt = (value & 0b0010_0000) != 0;
                 self.envelope.set_register(addr, value);
             },
             1 => self.sweep.set_register(value),
