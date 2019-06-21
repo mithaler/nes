@@ -36,7 +36,7 @@ impl Silencer for LengthCounter {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Envelope {
     pub start: bool,
     looping: bool,
