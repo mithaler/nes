@@ -1,9 +1,11 @@
 use crate::common::{Shared, shared, Clocked, CLOCKS_PER_FRAME, SAMPLES_PER_FRAME, Irq};
 use crate::apu::pulse::Pulse;
+use crate::apu::triangle::Triangle;
 use crate::apu::components::SweepNegator;
 
 mod components;
 mod pulse;
+mod triangle;
 
 const SAMPLE_RATE: f32 = (CLOCKS_PER_FRAME / SAMPLES_PER_FRAME / 2.0) - 1f32;
 
@@ -35,6 +37,7 @@ pub struct Apu {
     samples: Vec<f32>,
     pulse1: Pulse,
     pulse2: Pulse,
+    triangle: Triangle,
     enabled: EnabledChannels,
     frame_counter: FrameCounter,
 }
@@ -48,6 +51,7 @@ impl Apu {
             samples: Vec::with_capacity(SAMPLES_PER_FRAME as usize),
             pulse1: Pulse::new(SweepNegator::Pulse1),
             pulse2: Pulse::new(SweepNegator::Pulse2),
+            triangle: Default::default(),
             enabled: EnabledChannels::empty(),
             frame_counter: FrameCounter::empty(),
         })
@@ -67,6 +71,7 @@ impl Apu {
         match addr {
             0x4000 ... 0x4003 => self.pulse1.set_register(addr, value),
             0x4004 ... 0x4007 => self.pulse2.set_register(addr, value),
+            0x4008 ... 0x400B => self.triangle.set_register(addr, value),
             0x4015 => self.set_enabled_flags(value),
             0x4017 => self.frame_counter = FrameCounter::from_bits_truncate(value),
             _ => warn!("Unimplemented APU register: {:04X} -> {:02X}", addr, value)
@@ -83,7 +88,10 @@ impl Apu {
             true => self.pulse2.sample(),
             false => None
         }.unwrap_or(0f32);
-        let triangle = 0f32;
+        let triangle = match self.enabled.contains(EnabledChannels::TRIANGLE) {
+            true => self.triangle.sample(),
+            false => None
+        }.unwrap_or(0f32);
         let noise = 0f32;
         let dmc = 0f32;
 
@@ -101,21 +109,26 @@ impl Apu {
         if half_frame {
             self.pulse1.clock_half_frame();
             self.pulse2.clock_half_frame();
+            self.triangle.length_counter.tick();
         }
         self.pulse1.envelope.tick();
         self.pulse2.envelope.tick();
-        // clock triangle
+        self.triangle.clock_quarter_frame();
     }
 }
 
 impl Clocked for Apu {
     fn tick(&mut self) {
-        // https://wiki.nesdev.com/w/index.php/APU_Frame_Counter
-        // I am treating CPU and APU cycles as equivalent, so these are multiplied by 2!
         if (self.cycle & 1) == 0 {
+            // Pulse channels clock at half CPU rate
             self.pulse1.tick();
             self.pulse2.tick();
         }
+        // Triangle channel clocks at CPU rate
+        self.triangle.tick();
+
+        // https://wiki.nesdev.com/w/index.php/APU_Frame_Counter
+        // I am treating CPU and APU cycles as equivalent, so these are multiplied by 2!
         match self.cycle {
             7457 => self.clock_channels(false),
             14913 => self.clock_channels(true),

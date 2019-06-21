@@ -1,5 +1,5 @@
 use crate::apu::Channel;
-use crate::apu::components::{Envelope, LengthCounter, LENGTH_COUNTER_TABLE, Sweep, SweepNegator};
+use crate::apu::components::{Envelope, LengthCounter, Sweep, SweepNegator, Silencer};
 use crate::common::Clocked;
 
 enum Duty {
@@ -83,7 +83,7 @@ impl Channel for Pulse {
             3 => {
                 self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8);
                 self.sweep.update_target_period(self.period);
-                self.length_counter.length = LENGTH_COUNTER_TABLE[usize::from(value >> 3)];
+                self.length_counter.update_length(value >> 3);
                 self.envelope.start = true;
                 self.step = 0;
             },

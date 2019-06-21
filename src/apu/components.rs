@@ -6,7 +6,11 @@ pub const LENGTH_COUNTER_TABLE: [u8; 32] = [
     12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30   // 10 - 1F
 ];
 
-#[derive(Default)]
+pub trait Silencer {
+    fn silenced(&self) -> bool;
+}
+
+#[derive(Default, Debug)]
 pub struct LengthCounter {
     pub length: u8,
     pub halt: bool
@@ -21,7 +25,13 @@ impl Clocked for LengthCounter {
 }
 
 impl LengthCounter {
-    pub fn silenced(&self) -> bool {
+    pub fn update_length(&mut self, index: u8) {
+        self.length = LENGTH_COUNTER_TABLE[usize::from(index)];
+    }
+}
+
+impl Silencer for LengthCounter {
+    fn silenced(&self) -> bool {
         self.halt && self.length == 0
     }
 }
@@ -127,10 +137,6 @@ impl Sweep {
         self.shift_count = (value & 0b0000_0111) as u16;
     }
 
-    pub fn silenced(&self) -> bool {
-        self.target_period > 0x7FF || self.current_period < 8
-    }
-
     pub fn update_target_period(&mut self, value: u16) {
         self.current_period = value;
         let shifted = value >> self.shift_count;
@@ -146,6 +152,12 @@ impl Sweep {
             true => self.target_period,
             false => self.current_period
         }
+    }
+}
+
+impl Silencer for Sweep {
+    fn silenced(&self) -> bool {
+        self.target_period > 0x7FF || self.current_period < 8
     }
 }
 
