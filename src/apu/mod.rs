@@ -179,7 +179,7 @@ impl Clocked for Apu {
             }
             _ => {}
         }
-        if (self.cycle & 1) == 0 {
+        if (self.cycle & 1) == 0 && self.samples.len() < SAMPLES_PER_FRAME as usize {
             if self.sample_step <= 0f32 {
                 self.sample();
                 self.sample_step += SAMPLE_RATE;
