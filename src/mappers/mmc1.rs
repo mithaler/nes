@@ -50,8 +50,8 @@ impl ChrBankMode {
             ChrBankMode::Whole => resolved + ((bank0 & 0b1111_1110) * kb(8)),
             ChrBankMode::Separate => {
                 match addr {
-                    0x0 ... 0x0FFF => resolved + (bank0 * kb(8)),
-                    0x1000 ... 0x1FFF => resolved + (bank1 * kb(8)),
+                    0x0 ... 0x0FFF => resolved + (bank0 * kb(4)),
+                    0x1000 ... 0x1FFF => resolved - 0x1000 + (bank1 * kb(4)),
                     _ => unreachable!()
                 }
             }
@@ -130,12 +130,12 @@ impl Mmc1 {
     }
 
     fn chr_bank_0(&mut self, value: usize) {
-        self.selected_chr_bank_0 = value;
+        self.selected_chr_bank_0 = value & 0b0001_1111;
         debug!("Set MMC1 CHR bank 0: {:?} {:?}", self.chr_bank_mode, self.selected_chr_bank_0);
     }
 
     fn chr_bank_1(&mut self, value: usize) {
-        self.selected_chr_bank_1 = value;
+        self.selected_chr_bank_1 = value & 0b0001_1111;
         debug!("Set MMC1 CHR bank 1: {:?}", self.selected_chr_bank_1);
     }
 
