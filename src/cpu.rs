@@ -471,11 +471,11 @@ impl Cpu {
 
     fn stack_push(&mut self, datum: u8) {
         self.mem_write(join_bytes(0x01, self.s), datum);
-        self.s -= 1;
+        self.s = self.s.wrapping_sub(1);
     }
 
     fn stack_pop(&mut self) -> u8 {
-        self.s += 1;
+        self.s = self.s.wrapping_add(1);
         self.mem.get(join_bytes(0x01, self.s))
         // should this clear the byte it's pointing to? it'll be overwritten on next push
     }
