@@ -3,11 +3,14 @@ use crate::apu::pulse::Pulse;
 use crate::apu::triangle::Triangle;
 use crate::apu::components::SweepNegator;
 use crate::apu::noise::Noise;
+use crate::apu::dmc::Dmc;
+use crate::mappers::Mapper;
 
 mod components;
 mod pulse;
 mod triangle;
 mod noise;
+mod dmc;
 
 const SAMPLE_RATE: f32 = (CLOCKS_PER_FRAME / SAMPLES_PER_FRAME / 2.0) - 1f32;
 
@@ -42,13 +45,14 @@ pub struct Apu {
     pulse2: Pulse,
     triangle: Triangle,
     noise: Noise,
+    dmc: Dmc,
 
     enabled: EnabledChannels,
     frame_counter: FrameCounter,
 }
 
 impl Apu {
-    pub fn new() -> Shared<Apu> {
+    pub fn new(mapper: Mapper) -> Shared<Apu> {
         shared(Apu {
             cycle: 0,
             irq: false,
@@ -58,6 +62,7 @@ impl Apu {
             pulse2: Pulse::new(SweepNegator::Pulse2),
             triangle: Default::default(),
             noise: Noise::new(),
+            dmc: Dmc::new(mapper),
             enabled: EnabledChannels::empty(),
             frame_counter: FrameCounter::empty(),
         })
@@ -82,6 +87,7 @@ impl Apu {
             0x4004 ... 0x4007 => self.pulse2.set_register(addr, value),
             0x4008 ... 0x400B => self.triangle.set_register(addr, value),
             0x400C ... 0x400F => self.noise.set_register(addr, value),
+            0x4010 ... 0x4013 => self.dmc.set_register(addr, value),
             0x4015 => self.set_enabled_flags(value),
             0x4017 => self.frame_counter = FrameCounter::from_bits_truncate(value),
             _ => warn!("Unimplemented APU register: {:04X} -> {:02X}", addr, value)
@@ -106,7 +112,10 @@ impl Apu {
             true => self.noise.sample(),
             false => None
         }.unwrap_or(0f32);
-        let dmc = 0f32;
+        let dmc = match self.enabled.contains(EnabledChannels::DMC) {
+            true => self.dmc.sample(),
+            false => None
+        }.unwrap_or(0f32);
 
         // TODO triangle, noise, dmc
         let pulse = 0.00752 * (pulse_1 + pulse_2);
@@ -140,8 +149,9 @@ impl Clocked for Apu {
             self.pulse2.tick();
             self.noise.tick();
         }
-        // Triangle channel clocks at CPU rate
+        // Triangle and DMC channels clock at CPU rate
         self.triangle.tick();
+        self.dmc.tick();
 
         // https://wiki.nesdev.com/w/index.php/APU_Frame_Counter
         // I am treating CPU and APU cycles as equivalent, so these are multiplied by 2!

@@ -88,8 +88,8 @@ fn main() -> Result<(), Box<Error>> {
 
     let controllers = shared(Controllers::new());
     let mapper = mapper(header, rom_sections);
-    let apu = Apu::new();
     let ppu_mem = shared(PpuMem::new(mapper.clone()));
+    let apu = Apu::new(mapper.clone());
     let bus = Bus::new(apu.clone(), ppu_mem.clone(), controllers.clone());
     let cpu_mem = Box::new(CpuMem::new(mapper, bus));
 
