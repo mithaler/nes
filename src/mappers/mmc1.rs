@@ -66,7 +66,7 @@ pub struct Mmc1 {
     selected_chr_bank_1: usize,
     chr_bank_mode: ChrBankMode,
     shift_register: u8,
-    prg_ram: Option<Mem>,
+    prg_ram: Mem,
     prg_rom: Mem,
     chr_rom: Mem,
     internal_vram: Mem,
@@ -85,10 +85,7 @@ impl Mmc1 {
             initialized_mem(0x2000)
         };
 
-        let prg_ram = match attrs.prg_ram {
-            true => Some(initialized_mem(kb(8))),
-            false => None
-        };
+        let prg_ram = initialized_mem(kb(8));
 
         shared(Mmc1 {
             selected_prg_bank: 0,
@@ -183,7 +180,7 @@ impl Mapping for Mmc1 {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
             0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize],
+            0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
     }
@@ -192,7 +189,7 @@ impl Mapping for Mmc1 {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
             0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
+            0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize] = value,
             0x8000...0xFFFF => self.write_shift_register(addr, value)
         }
     }
