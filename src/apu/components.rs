@@ -137,13 +137,16 @@ impl Sweep {
         self.shift_count = (value & 0b0000_0111) as u16;
     }
 
-    pub fn update_target_period(&mut self, value: u16) {
+    pub fn update_target_period(&mut self, value: u16, reset_target: bool) {
         self.current_period = value;
+        if reset_target {
+            self.target_period = self.current_period;
+        }
         let shifted = value >> self.shift_count;
         self.target_period = if self.negate {
-            self.negator.add(value, shifted)
+            self.negator.add(self.target_period, shifted)
         } else {
-            value + shifted
+            self.target_period + shifted
         }
     }
 
@@ -167,7 +170,7 @@ impl Clocked for Sweep {
             self.enabled &&
             !self.silenced() &&
             self.shift_count != 0 {
-            self.update_target_period(self.current_period);
+            self.update_target_period(self.current_period, false);
         }
         if self.divider == 0 || self.reload {
             self.divider = self.divider_period;

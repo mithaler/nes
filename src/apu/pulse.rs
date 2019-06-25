@@ -78,11 +78,11 @@ impl Channel for Pulse {
             1 => self.sweep.set_register(value),
             2 => {
                 self.period = self.period & 0xFF00 | value as u16;
-                self.sweep.update_target_period(self.period);
+                self.sweep.update_target_period(self.period, true);
             },
             3 => {
                 self.period = self.period & 0x00FF | (((value & 0b0000_0111) as u16) << 8);
-                self.sweep.update_target_period(self.period);
+                self.sweep.update_target_period(self.period, true);
                 self.length_counter.update_length(value >> 3);
                 self.envelope.start = true;
                 self.step = 0;
