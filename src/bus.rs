@@ -135,7 +135,7 @@ impl Bus {
             0x2006 => panic!("PPUADDR not readable by CPU!"),
             0x2007 => self.get_ppudata(),
 
-            0x4000 ... 0x4015 => panic!("APU registers not readable by CPU!"),
+            0x4000 ... 0x4015 => self.apu.borrow_mut().get_register(register),
 
             0x4016 => self.controllers.borrow_mut().report_controller_1(),
             0x4017 => self.controllers.borrow_mut().report_controller_2(),

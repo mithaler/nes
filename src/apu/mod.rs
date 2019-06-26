@@ -94,6 +94,38 @@ impl Apu {
         }
     }
 
+    pub fn get_register(&mut self, addr: u16) -> u8 {
+        match addr {
+            0x4000 ... 0x4014 => panic!("Bad APU register read: {:04X?}", addr),
+            0x4015 => {
+                let mut out = 0u8;
+                if self.dmc.irq {
+                    out |= 0b1000_0000;
+                }
+                if self.irq {
+                    out |= 0b0100_0000;
+                }
+                if self.dmc.bytes_remaining > 0 {
+                    out |= 0b0001_0000;
+                }
+                if self.noise.length_counter.length > 0 {
+                    out |= 0b0000_1000;
+                }
+                if self.triangle.length_counter.length > 0 {
+                    out |= 0b0000_0100;
+                }
+                if self.pulse2.length_counter.length > 0 {
+                    out |= 0b0000_0010;
+                }
+                if self.pulse1.length_counter.length > 0 {
+                    out |= 0b0000_0001;
+                }
+                out
+            },
+            _ => unreachable!("Nonsense APU register read")
+        }
+    }
+
     fn sample(&mut self) {
         // https://wiki.nesdev.com/w/index.php/APU_Mixer
         let pulse_1 = match self.enabled.contains(EnabledChannels::PULSE_1) {
@@ -169,6 +201,7 @@ impl Clocked for Apu {
                     self.clock_channels(true);
                     self.cycle = 0;
                 }
+                // This is technically wrong; the CPU needs to acknowledge it
                 self.irq = false;
             }
             37281 => {

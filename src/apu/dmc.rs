@@ -8,7 +8,7 @@ const PERIOD_TABLE: [u16; 16] = [
 ];
 
 pub struct Dmc {
-    irq: bool,
+    pub (crate) irq: bool,
     looping: bool,
     silence: bool,
 
@@ -24,7 +24,7 @@ pub struct Dmc {
     sample_addr: u16,
     current_sample_addr: u16,
     sample_length: u16,
-    bytes_remaining: u16,
+    pub (crate) bytes_remaining: u16,
     sample_buffer: Option<u8>,
 }
 
