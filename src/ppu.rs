@@ -144,6 +144,14 @@ impl Ppu {
         &self.framebuffer
     }
 
+    fn bg_enabled(&self) -> bool {
+        (self.mem.borrow().get_ppumask() & 0b0000_1000) != 0
+    }
+
+    fn sprites_enabled(&self) -> bool {
+        (self.mem.borrow().get_ppumask() & 0b0001_0000) != 0
+    }
+
     // TODO optimization: since we're not caching these from scanline to scanline, we only need
     // one row of these at a time, so we don't have to return and store all 8/16.
     fn pattern(&self, num: u8, base_addr: u16, large: bool, horizontal_flip: bool, vertical_flip: bool) -> Vec<Vec<u8>> {
@@ -403,16 +411,15 @@ impl Ppu {
             self.update_scroll_position();
         }
 
-        let ppumask = self.mem.borrow().get_ppumask();
         let mut bg_color: Option<(ColorRef, u8)> = None;
         let mut sprite: Option<(ColorRef, &Sprite)> = None;
         if self.tick == 0 {
             self.sprites = self.scanline_sprites();
         } else if (1..=256).contains(&self.tick) {
-            if (ppumask & 0b0000_1000) != 0 {
+            if self.bg_enabled() {
                 bg_color = Some(self.render_background_pixel());
             }
-            if (ppumask & 0b0001_0000) != 0 {
+            if self.sprites_enabled() {
                 sprite = self.render_sprite_pixel();
             }
             // TODO this should probably be taking into account "transparency" somehow
@@ -425,7 +432,7 @@ impl Ppu {
             self.framebuffer[self.framebuffer_index + 2] = color.2;
             self.framebuffer_index += 3;
         }
-        if self.tick == 260 {
+        if self.tick == 260 && (self.bg_enabled() || self.sprites_enabled()){
             self.mem.borrow_mut().mapper.borrow_mut().clock_scanline();
         }
     }

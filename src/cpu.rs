@@ -1119,11 +1119,11 @@ impl Clocked for Cpu {
         if self.remaining_pause > 0 {
             self.remaining_pause -= 1;
             return
-        } else if self.irq {
-            self.irq();
-            return
         } else if self.nmi {
             self.nmi();
+            return
+        } else if self.irq {
+            self.irq();
             return
         } else if self.reset {
             self.reset();

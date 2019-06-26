@@ -157,7 +157,7 @@ impl Mmc3 {
                 0x0000...0x0FFF => {
                     let (bank, position) = div_rem(addr, kb(2));
                     self.chr_course_bank_registers[bank] * kb(1) + position
-                } ,
+                },
                 0x1000...0x1FFF => {
                     let (bank, position) = div_rem(addr - 0x1000, kb(1));
                     self.chr_fine_bank_registers[bank] * kb(1) + position
@@ -230,11 +230,11 @@ impl Mapping for Mmc3 {
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x2000 ... 0x2FFF => {
+            0x2000...0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value;
             },
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000...0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!("Bad MMC3 write: {:04X?} -> {:02X?}", addr, value)
         }
     }
