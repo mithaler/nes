@@ -1,7 +1,7 @@
 // https://wiki.nesdev.com/w/index.php/MMC3
 use crate::mappers::{Mapping, kb, NametableMirror, Resolver, HeaderAttributes};
 use crate::memory::{Mem, mem, initialized_mem};
-use crate::common::{Shared, shared, Clocked};
+use crate::common::{Shared, shared, Clocked, OPEN_BUS_VALUE};
 
 // I wish this were in the stdlib
 fn div_rem(a: usize, b: usize) -> (usize, usize) {
@@ -182,7 +182,7 @@ impl Mapping for Mmc3 {
             0x6000...0x7FFF => {
                 match self.ram_enabled {
                     true => self.prg_ram[resolved - 0x6000],
-                    false => 0x40 // open bus
+                    false => OPEN_BUS_VALUE
                 }
             },
             0x8000...0x9FFF => self.prg_rom[self.resolve_swappable_prg_bank(resolved, 0x8000)],

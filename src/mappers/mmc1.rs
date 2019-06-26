@@ -1,7 +1,7 @@
 // Mapper 001: https://wiki.nesdev.com/w/index.php/MMC1
 // Mapper 002: https://wiki.nesdev.com/w/index.php/UxROM
 
-use crate::common::{Shared, shared};
+use crate::common::{Shared, shared, OPEN_BUS_VALUE};
 use crate::memory::{Mem, mem, initialized_mem};
 use crate::mappers::{NametableMirror, HeaderAttributes, Mapping, Resolver, kb};
 
@@ -179,7 +179,7 @@ impl Mapping for Mmc1 {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x4020...0x5FFF => OPEN_BUS_VALUE,
             0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
@@ -188,7 +188,7 @@ impl Mapping for Mmc1 {
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x4020...0x5FFF => {},
             0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize] = value,
             0x8000...0xFFFF => self.write_shift_register(addr, value)
         }
@@ -271,7 +271,7 @@ impl Mapping for Uxrom {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x4020...0x5FFF => OPEN_BUS_VALUE,
             0x6000...0x7FFF => self.prg_ram.as_ref().map_or(0, |ram| ram[(addr - 0x6000) as usize]),
             0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
@@ -280,7 +280,7 @@ impl Mapping for Uxrom {
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
             0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x4020...0x5FFF => {},
             0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
             0x8000...0xFFFF => self.set_bank_mode(value)
         }

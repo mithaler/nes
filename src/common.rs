@@ -4,6 +4,9 @@ use std::rc::Rc;
 pub const CLOCKS_PER_FRAME: f32 = 29780f32;
 pub const SAMPLES_PER_FRAME: f32 = 735f32; // 44100 Hz / 60 FPS
 
+/// Buses often return this if there's nothing connected to them.
+pub const OPEN_BUS_VALUE: u8 = 0x40;
+
 /// A heap-allocated, mutably shared object. Currently assumes the application is
 /// single-threaded; the underlying implementation of how this is shared will change
 /// if we ever make it multi-threaded.
