@@ -330,7 +330,7 @@ impl Ppu {
             debug!("-- ENTERING VBLANK --");
             self.mem.borrow_mut().set_vblank(true);
             if self.mem.borrow().get_ppuctrl().send_nmi {
-                self.cpu.borrow_mut().nmi();
+                self.cpu.borrow_mut().flag_nmi();
             }
         }
     }
@@ -424,6 +424,9 @@ impl Ppu {
             self.framebuffer[self.framebuffer_index + 1] = color.1;
             self.framebuffer[self.framebuffer_index + 2] = color.2;
             self.framebuffer_index += 3;
+        }
+        if self.tick == 260 {
+            self.mem.borrow_mut().mapper.borrow_mut().clock_scanline();
         }
     }
 

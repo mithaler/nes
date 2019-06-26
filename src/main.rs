@@ -26,7 +26,7 @@ use crate::bus::Bus;
 use crate::common::{Clocked, SAMPLES_PER_FRAME, shared, Shared, Irq};
 use crate::controllers::Controllers;
 use crate::cpu::Cpu;
-use crate::mappers::mapper;
+use crate::mappers::{mapper, Mapper};
 use crate::memory::{CpuMem, Mem, PpuMem};
 use crate::ppu::Ppu;
 
@@ -51,6 +51,7 @@ struct Context<'a> {
     audio_queue: AudioQueue<f32>,
     ppu: Ppu,
     apu: Shared<Apu>,
+    mapper: Mapper,
     event_pump: EventPump
 }
 
@@ -91,7 +92,7 @@ fn main() -> Result<(), Box<Error>> {
     let ppu_mem = shared(PpuMem::new(mapper.clone()));
     let apu = Apu::new(mapper.clone());
     let bus = Bus::new(apu.clone(), ppu_mem.clone(), controllers.clone());
-    let cpu_mem = Box::new(CpuMem::new(mapper, bus));
+    let cpu_mem = Box::new(CpuMem::new(mapper.clone(), bus));
 
     let cpu = shared(Cpu::new(cpu_mem, matches.is_present("test_mode")));
     let ppu = Ppu::new(ppu_mem.clone(), cpu.clone());
@@ -126,7 +127,8 @@ fn main() -> Result<(), Box<Error>> {
     let audio_queue = sdl_context.audio()?.open_queue(None, &audio_spec)?;
     audio_queue.resume();
 
-    let mut context = Context {event_pump, texture, canvas, audio_queue, cpu, ppu, apu, controllers};
+    let mut context = Context {event_pump, texture, canvas, audio_queue,
+                               cpu, ppu, apu, mapper, controllers};
     frame_loop(&mut context)
 }
 
@@ -140,7 +142,7 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => running = false,
-                Event::KeyDown { keycode: Some(Keycode::F7), .. } => context.cpu.borrow_mut().reset(),
+                Event::KeyDown { keycode: Some(Keycode::F7), .. } => context.cpu.borrow_mut().flag_reset(),
                 Event::KeyDown { keycode: Some(Keycode::Backquote), .. } => turbo = true,
                 Event::KeyUp { keycode: Some(Keycode::Backquote), .. } => turbo = false,
                 Event::KeyDown { keycode: Some(_), .. } => context.controllers.borrow_mut().event(event),
@@ -171,9 +173,9 @@ fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>
             context.cpu.borrow_mut().tick();
             context.apu.borrow_mut().tick();
 
-            if context.apu.borrow().irq() {
+            if context.apu.borrow().irq() || context.mapper.borrow_mut().irq() {
                 // I think this is wrong; really this should be setting a flag for next cycle
-                context.cpu.borrow_mut().irq();
+                context.cpu.borrow_mut().flag_irq();
             }
         }
         context.ppu.tick();

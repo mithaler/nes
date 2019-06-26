@@ -379,6 +379,10 @@ pub struct Cpu {
     s: u8, // stack
     p: Status, // flags
 
+    nmi: bool,
+    irq: bool,
+    reset: bool,
+
     remaining_pause: u16,
     instruction_counter: u64,
 }
@@ -407,6 +411,9 @@ impl Cpu {
             pc: 0x8000,
             s: 0xfd,
             p: Status::BREAK | Status::INTERRUPT_DISABLE,
+            nmi: false,
+            irq: false,
+            reset: false,
             remaining_pause: 0,
             instruction_counter: 0,
         };
@@ -489,17 +496,20 @@ impl Cpu {
         self.pc = join_bytes(self.mem.get(vector + 1), self.mem.get(vector));
     }
 
-    pub fn irq(&mut self) {
+    fn irq(&mut self) {
+        self.irq = false;
         if !self.interrupt_disabled() {
             self.interrupt(0b0011_0000, IRQ_VECTOR)
         }
     }
 
-    pub fn nmi(&mut self) {
+    fn nmi(&mut self) {
+        self.nmi = false;
         self.interrupt(0b0011_0000, NMI_VECTOR)
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
+        self.reset = false;
         self.interrupt(0b0011_0000, RESET_VECTOR)
     }
 
@@ -616,7 +626,7 @@ impl Cpu {
             TXA => self.transfer_op(|cpu| { cpu.a = cpu.x; (cpu.a, true) }),
             TYA => self.transfer_op(|cpu| { cpu.a = cpu.y; (cpu.a, true) }),
 
-            _ => unimplemented!("{:?}", op)
+            _ => unimplemented!("addr {:04X?} -> {:?}", self.pc, op)
         }
     }
 
@@ -1091,12 +1101,32 @@ impl Cpu {
         1
     }
 
+    pub fn flag_nmi(&mut self) {
+        self.nmi = true;
+    }
+
+    pub fn flag_irq(&mut self) {
+        self.irq = true;
+    }
+
+    pub fn flag_reset(&mut self) {
+        self.reset = true;
+    }
 }
 
 impl Clocked for Cpu {
     fn tick(&mut self) {
         if self.remaining_pause > 0 {
             self.remaining_pause -= 1;
+            return
+        } else if self.irq {
+            self.irq();
+            return
+        } else if self.nmi {
+            self.nmi();
+            return
+        } else if self.reset {
+            self.reset();
             return
         }
 

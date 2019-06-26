@@ -95,7 +95,7 @@ impl PpuCtrl {
 
 // https://wiki.nesdev.com/w/index.php/PPU_memory_map
 pub struct PpuMem {
-    mapper: Mapper,
+    pub mapper: Mapper,
     palette_ram: Mem,
     oam: Mem,
 

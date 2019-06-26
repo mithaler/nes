@@ -1,7 +1,7 @@
 // https://wiki.nesdev.com/w/index.php/MMC3
 use crate::mappers::{Mapping, kb, NametableMirror, Resolver, HeaderAttributes};
 use crate::memory::{Mem, mem, initialized_mem};
-use crate::common::{Shared, shared};
+use crate::common::{Shared, shared, Clocked};
 
 // I wish this were in the stdlib
 fn div_rem(a: usize, b: usize) -> (usize, usize) {
@@ -15,6 +15,22 @@ struct IrqCounter {
     latch: u8,
     counter: u8,
     triggered: bool
+}
+
+impl Clocked for IrqCounter {
+    fn tick(&mut self) {
+        if self.reload {
+            self.counter = self.latch;
+            self.reload = false;
+        } else if self.counter == 0 {
+            self.counter = self.latch;
+            if self.enabled {
+                self.triggered = true;
+            }
+        } else {
+            self.counter -= 1;
+        }
+    }
 }
 
 // See the wiki page for an explanation of the many registers
@@ -96,6 +112,7 @@ impl Mmc3 {
             7 => self.prg_r7 = (value & 0b0011_1111) as usize,
             _ => unreachable!()
         }
+        debug!("MMC3 bank register change: R{:?} -> {:?}", self.bank_selector, value);
     }
 
     fn set_nametable_mirror(&mut self, value: u8) {
@@ -190,14 +207,15 @@ impl Mapping for Mmc3 {
             0xC001...0xDFFF if addr & 1 == 1 => self.irq.reload = true,
             0xE000...0xFFFE if addr & 1 == 0 => {
                 self.irq.enabled = false;
-                self.irq.triggered = false
+                self.irq.counter = self.irq.latch;
+                self.irq.triggered = false;
             },
             0xE001...0xFFFF if addr & 1 == 1 => self.irq.enabled = true,
-            _ => unimplemented!("Unimplemented MMC3 write: {:04X?} -> {:02X?}", addr, value)
+            _ => unimplemented!("MMC3 write: {:04X?} -> {:02X?}", addr, value)
         }
     }
 
-    fn get_cpu_page(&self, start_addr: u16) -> &[u8] {
+    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
         unimplemented!()
     }
 
@@ -217,7 +235,20 @@ impl Mapping for Mmc3 {
                 self.internal_vram[addr] = value;
             },
             0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
-            _ => unimplemented!()
+            _ => unimplemented!("Bad MMC3 write: {:04X?} -> {:02X?}", addr, value)
+        }
+    }
+
+    fn clock_scanline(&mut self) {
+        self.irq.tick();
+    }
+
+    fn irq(&mut self) -> bool {
+        if self.irq.triggered {
+            self.irq.triggered = false;
+            true
+        } else {
+            false
         }
     }
 }
