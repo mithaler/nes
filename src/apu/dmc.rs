@@ -43,8 +43,8 @@ impl Dmc {
             load_counter: 0,
             shift_register: 0,
 
-            sample_addr: 0,
-            current_sample_addr: 0,
+            sample_addr: 0xC000,
+            current_sample_addr: 0xC000,
             sample_length: 0,
             bytes_remaining: 0,
             sample_buffer: None
