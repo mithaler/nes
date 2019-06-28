@@ -145,11 +145,15 @@ impl Ppu {
     }
 
     fn bg_enabled(&self) -> bool {
-        (self.mem.borrow().get_ppumask() & 0b0000_1000) != 0
+        let ppumask = self.mem.borrow().get_ppumask();
+        (ppumask & 0b0000_1000) != 0 &&
+            (self.tick > 7 || (ppumask & 0b0000_0010) != 0)
     }
 
     fn sprites_enabled(&self) -> bool {
-        (self.mem.borrow().get_ppumask() & 0b0001_0000) != 0
+        let ppumask = self.mem.borrow().get_ppumask();
+        (ppumask & 0b0001_0000) != 0 &&
+            (self.tick > 7 || (ppumask & 0b0000_0100) != 0)
     }
 
     // TODO optimization: since we're not caching these from scanline to scanline, we only need

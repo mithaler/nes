@@ -149,7 +149,6 @@ impl Apu {
             false => None
         }.unwrap_or(0f32);
 
-        // TODO triangle, noise, dmc
         let pulse = 0.00752 * (pulse_1 + pulse_2);
         let tri_noise_dmc = 0.00851 * triangle + 0.00494 * noise + 0.00335 * dmc;
         self.samples.push(pulse + tri_noise_dmc)
