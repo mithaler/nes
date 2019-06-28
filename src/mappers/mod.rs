@@ -54,7 +54,6 @@ impl HeaderAttributes {
 pub trait Mapping {
     fn get_cpu_space(&self, addr: u16) -> u8;
     fn set_cpu_space(&mut self, addr: u16, value: u8);
-    fn get_cpu_page(&self, start_addr: u16) -> &[u8];
 
     fn get_ppu_space(&self, addr: u16) -> u8;
     fn set_ppu_space(&mut self, addr: u16, value: u8);

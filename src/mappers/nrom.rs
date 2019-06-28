@@ -87,11 +87,6 @@ impl Mapping for Nrom {
         }
     }
 
-    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
-        // I don't know if any games do this!
-        unimplemented!()
-    }
-
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[addr as usize],

@@ -70,10 +70,6 @@ impl Mapping for Gxrom {
         }
     }
 
-    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
-        unimplemented!()
-    }
-
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[Gxrom::chr_rom_addr(addr, self.chr_bank)],

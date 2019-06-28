@@ -194,10 +194,6 @@ impl Mapping for Mmc1 {
         }
     }
 
-    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
-        unimplemented!()
-    }
-
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
             0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)],
@@ -284,10 +280,6 @@ impl Mapping for Uxrom {
             0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
             0x8000...0xFFFF => self.set_bank_mode(value)
         }
-    }
-
-    fn get_cpu_page(&self, _start_addr: u16) -> &[u8] {
-        unimplemented!()
     }
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
