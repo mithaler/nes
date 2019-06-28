@@ -372,18 +372,18 @@ impl Ppu {
         }
     }
 
-    fn render_background_pixel(&mut self) -> (ColorRef, u8) {
+    fn render_background_pixel(&mut self) -> (ColorRef) {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
         let y = ((self.scanline + (self.scroll_y as i16 & 0b0000_0111)) % 8) as usize;
         let x = ((self.tick + (self.scroll_x & 0b0000_0111)) % 8) as usize;
         let pixel = tile.pattern[y][x];
-        (tile.palette[pixel as usize], pixel)
+        tile.palette[pixel as usize]
     }
 
     /// Returns the opaque pixel of the sprite on the current tick if there should be one,
     /// plus a `bool` that is true if the sprite is sprite 0 (for Sprite 0 Hit detection).
-    fn render_sprite_pixel(&self) -> Option<(ColorRef, &Sprite)> {
+    fn render_sprite_pixel(&self) -> Option<(ColorRef, u8, &Sprite)> {
         for sprite in self.sprites.iter() {
             let mut x = u16::from(sprite.x);
             if self.tick >= x && self.tick < x + 8 {
@@ -391,23 +391,31 @@ impl Ppu {
                 x = self.tick - x;
                 let pixel = sprite.pattern[y as usize][x as usize] as usize;
                 if pixel != 0 {
-                    return Some((sprite.palette[pixel], sprite));
+                    return Some((sprite.palette[pixel], pixel as u8, sprite));
                 }
             }
         }
         None
     }
 
-    fn reconcile_pixel(&self, bg: Option<(ColorRef, u8)>, sprite: Option<(ColorRef, &Sprite)>) -> ColorRef {
+    fn reconcile_pixel(&self, bg: Option<(ColorRef)>, sprite: Option<(ColorRef, u8, &Sprite)>) -> ColorRef {
         match sprite {
-            None => bg.map(|t| t.0),
-            Some((color, sp)) => {
+            None => bg,
+            Some((color, _, sp)) => {
                 match sp.behind_background {
-                    true => bg.filter(|t| t.1 != 0).map(|t| t.0).or(Some(color)),
+                    true => bg.filter(|t| t.1 != 0).or(Some(color)),
                     false => Some(color)
                 }
             }
         }.unwrap_or_else(|| color(self.mem.borrow().get(0x3F00)))
+    }
+
+    fn check_sprite0hit(&self, bg: Option<(ColorRef)>, sprite: Option<(ColorRef, u8, &Sprite)>) {
+        if let (Some(_), Some((_, sp, sprite))) = (bg, sprite) {
+            if self.tick < 255 && sprite.index == 0 && sp != 0 {
+                self.mem.borrow_mut().set_sprite0hit(true);
+            }
+        }
     }
 
     fn visible_scanline(&mut self) {
@@ -415,8 +423,8 @@ impl Ppu {
             self.update_scroll_position();
         }
 
-        let mut bg_color: Option<(ColorRef, u8)> = None;
-        let mut sprite: Option<(ColorRef, &Sprite)> = None;
+        let mut bg_color: Option<(ColorRef)> = None;
+        let mut sprite: Option<(ColorRef, u8, &Sprite)> = None;
         if self.tick == 0 {
             self.sprites = self.scanline_sprites();
         } else if (1..=256).contains(&self.tick) {
@@ -426,17 +434,14 @@ impl Ppu {
             if self.sprites_enabled() {
                 sprite = self.render_sprite_pixel();
             }
-            // TODO this should probably be taking into account "transparency" somehow
-            if sprite.is_some() && bg_color.is_some() && sprite.unwrap().1.index == 0 {
-                self.mem.borrow_mut().set_sprite0hit(true);
-            }
+            self.check_sprite0hit(bg_color, sprite);
             let color = self.reconcile_pixel(bg_color, sprite);
             self.framebuffer[self.framebuffer_index] = color.0;
             self.framebuffer[self.framebuffer_index + 1] = color.1;
             self.framebuffer[self.framebuffer_index + 2] = color.2;
             self.framebuffer_index += 3;
         }
-        if self.tick == 260 && (self.bg_enabled() || self.sprites_enabled()){
+        if self.tick == 260 && (self.bg_enabled() || self.sprites_enabled()) {
             self.mem.borrow_mut().mapper.borrow_mut().clock_scanline();
         }
     }
