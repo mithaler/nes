@@ -525,7 +525,7 @@ mod tests {
     fn test_ppu() -> (Shared<PpuMem>, Ppu) {
         let mapper = test_mapper(&[], test_pattern().as_slice());
         let ppu_mem = shared(PpuMem::new(mapper.clone()));
-        let bus = Bus::new(Apu::new(), ppu_mem.clone(), shared(Controllers::new()));
+        let bus = Bus::new(Apu::new(mapper.clone()), ppu_mem.clone(), shared(Controllers::new()));
         let cpu = shared(Cpu::new(Box::new(CpuMem::new(mapper.clone(), bus)), true));
         (ppu_mem.clone(), Ppu::new(ppu_mem.clone(), cpu))
     }
