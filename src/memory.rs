@@ -206,7 +206,14 @@ impl Addressable for PpuMem {
     fn get(&self, addr: u16) -> u8 {
         match addr {
             0x0000 ... 0x3EFF => self.mapper.borrow().get_ppu_space(addr),
-            0x3F00 ... 0x3FFF => self.palette_ram[PpuMem::palette_ram_address(addr)],
+            0x3F00 ... 0x3FFF => {
+                let out = self.palette_ram[PpuMem::palette_ram_address(addr)];
+                if (self.ppumask & 1) != 0 {
+                    out & 0x30
+                } else {
+                    out
+                }
+            },
             _ => panic!()
         }
     }
