@@ -105,6 +105,7 @@ pub struct PpuMem {
     pub scroll_y: u8,
     vblank: bool,
     sprite0hit: bool,
+    sprite_overflow: bool,
 }
 
 type Pattern = (Vec<u8>, Vec<u8>);
@@ -122,6 +123,7 @@ impl PpuMem {
             scroll_y: 0,
             vblank: false,
             sprite0hit: false,
+            sprite_overflow: false,
         }
     }
 
@@ -151,6 +153,10 @@ impl PpuMem {
 
     pub fn set_sprite0hit(&mut self, sprite0hit: bool) {
         self.sprite0hit = sprite0hit;
+    }
+
+    pub fn set_sprite_overflow(&mut self, sprite_overflow: bool) {
+        self.sprite_overflow = sprite_overflow;
     }
 
     pub fn get_ppuctrl(&self) -> &PpuCtrl {
@@ -186,7 +192,9 @@ impl PpuMem {
         if self.sprite0hit {
             out |= 0b0100_0000;
         }
-        // TODO overflow
+        if self.sprite_overflow {
+            out |= 0b0010_0000;
+        }
         out
     }
 

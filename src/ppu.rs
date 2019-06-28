@@ -291,8 +291,11 @@ impl Ppu {
         Tile {x, y, num, pattern, palette}
     }
 
-    fn scanline_sprites(&self) -> Box<Vec<Sprite>> {
+    /// Returns the current scanline's sprites, and a bool
+    /// indicating whether there was a sprite overflow.
+    fn scanline_sprites(&self) -> (Box<Vec<Sprite>>, bool) {
         let mem = self.mem.borrow();
+        let mut overflow = false;
         let ppuctrl = mem.get_ppuctrl();
         let large = ppuctrl.sprite_size_large;
         let oam = mem.borrow_oam();
@@ -302,6 +305,11 @@ impl Ppu {
         for sprite in 0..=63 {
             let y = oam[4 * sprite] as u16 + 1;
             if scanline >= y && scanline < y + (if large {16} else {8}) {
+                if out.len() == 8 {
+                    // found a 9th sprite, so set sprite overflow to true
+                    overflow = true;
+                    break;
+                }
                 let (index, attrs, x) = (
                     oam[4 * sprite + 1],
                     oam[4 * sprite + 2],
@@ -329,20 +337,18 @@ impl Ppu {
                     behind_background,
                     palette
                 });
-                if out.len() == 8 {
-                    break;
-                }
             }
         }
-        out
+        (out, overflow)
     }
 
     fn dummy_scanline(&mut self) {
         // TODO even/odd frame
         if self.tick == 1 {
             debug!("-- EXITING VBLANK --");
-            self.mem.borrow_mut().set_vblank(false);  // TODO overflow
+            self.mem.borrow_mut().set_vblank(false);
             self.mem.borrow_mut().set_sprite0hit(false);
+            self.mem.borrow_mut().set_sprite_overflow(false);
         }
         self.framebuffer_index = 0;
     }
@@ -436,7 +442,11 @@ impl Ppu {
         let mut bg_color: Option<(ColorRef)> = None;
         let mut sprite: Option<(ColorRef, u8, &Sprite)> = None;
         if self.tick == 0 {
-            self.sprites = self.scanline_sprites();
+            let (sprites, overflow) = self.scanline_sprites();
+            self.sprites = sprites;
+            if overflow {
+                self.mem.borrow_mut().set_sprite_overflow(true);
+            }
         } else if (1..=256).contains(&self.tick) {
             if self.bg_enabled() {
                 bg_color = Some(self.render_background_pixel());
