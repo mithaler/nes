@@ -432,7 +432,7 @@ impl Cpu {
     }
 
     /// Returns whether the addresses are on different 256-byte pages.
-    fn different_pages(addr1: u16, addr2: u16) -> bool {
+    fn _different_pages(addr1: u16, addr2: u16) -> bool {
         (addr1 & 0xFF00) != (addr2 & 0xFF00)
     }
 

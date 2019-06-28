@@ -72,6 +72,7 @@ impl Controllers {
         };
     }
 
+    #[cfg(test)]
     fn controller_2_event(&mut self, event: ControllerEvent, button: Button) {
         match event {
             ControllerEvent::JoyDown => self.controller_2_active_buttons |= button.index(),
