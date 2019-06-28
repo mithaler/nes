@@ -144,16 +144,26 @@ impl Ppu {
         &self.framebuffer
     }
 
+    /// The current X coordinate being rendered.
+    fn x(&self) -> u16 {
+        self.tick - 1
+    }
+
+    /// The current Y coordinate being rendered.
+    fn y(&self) -> i16 {
+        self.scanline
+    }
+
     fn bg_enabled(&self) -> bool {
         let ppumask = self.mem.borrow().get_ppumask();
         (ppumask & 0b0000_1000) != 0 &&
-            (self.tick > 7 || (ppumask & 0b0000_0010) != 0)
+            (self.x() > 7 || (ppumask & 0b0000_0010) != 0)
     }
 
     fn sprites_enabled(&self) -> bool {
         let ppumask = self.mem.borrow().get_ppumask();
         (ppumask & 0b0001_0000) != 0 &&
-            (self.tick > 7 || (ppumask & 0b0000_0100) != 0)
+            (self.x() > 7 || (ppumask & 0b0000_0100) != 0)
     }
 
     // TODO optimization: since we're not caching these from scanline to scanline, we only need
@@ -269,8 +279,8 @@ impl Ppu {
     }
 
     fn curr_tile_coordinates(&self) -> (u8, u8) {
-        ((((self.tick + self.scroll_x) / 8) % 64) as u8,
-         (((self.scanline + self.scroll_y as i16) / 8) % 60) as u8)
+        ((((self.x() + self.scroll_x) / 8) % 64) as u8,
+         (((self.y() + self.scroll_y as i16) / 8) % 60) as u8)
     }
 
     fn tile(&self, x: u8, y: u8) -> Tile {
@@ -288,7 +298,7 @@ impl Ppu {
         let oam = mem.borrow_oam();
 
         let mut out = Box::new(Vec::with_capacity(8));
-        let scanline = self.scanline as u16;  // safe, only called on rendering scanlines
+        let scanline = self.y() as u16;  // safe, only called on rendering scanlines
         for sprite in 0..=63 {
             let y = oam[4 * sprite] as u16 + 1;
             if scanline >= y && scanline < y + (if large {16} else {8}) {
@@ -375,8 +385,8 @@ impl Ppu {
     fn render_background_pixel(&mut self) -> (ColorRef) {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
-        let y = ((self.scanline + (self.scroll_y as i16 & 0b0000_0111)) % 8) as usize;
-        let x = ((self.tick + (self.scroll_x & 0b0000_0111)) % 8) as usize;
+        let y = ((self.y() + (self.scroll_y as i16 & 0b0000_0111)) % 8) as usize;
+        let x = ((self.x() + (self.scroll_x & 0b0000_0111)) % 8) as usize;
         let pixel = tile.pattern[y][x];
         tile.palette[pixel as usize]
     }
@@ -386,9 +396,9 @@ impl Ppu {
     fn render_sprite_pixel(&self) -> Option<(ColorRef, u8, &Sprite)> {
         for sprite in self.sprites.iter() {
             let mut x = u16::from(sprite.x);
-            if self.tick >= x && self.tick < x + 8 {
-                let y = self.scanline - (sprite.y as i16);
-                x = self.tick - x;
+            if self.x() >= x && self.x() < x + 8 {
+                let y = self.y() - (sprite.y as i16);
+                x = self.x() - x;
                 let pixel = sprite.pattern[y as usize][x as usize] as usize;
                 if pixel != 0 {
                     return Some((sprite.palette[pixel], pixel as u8, sprite));
@@ -412,7 +422,7 @@ impl Ppu {
 
     fn check_sprite0hit(&self, bg: Option<(ColorRef)>, sprite: Option<(ColorRef, u8, &Sprite)>) {
         if let (Some(_), Some((_, sp, sprite))) = (bg, sprite) {
-            if self.tick < 255 && sprite.index == 0 && sp != 0 {
+            if self.x() < 255 && sprite.index == 0 && sp != 0 {
                 self.mem.borrow_mut().set_sprite0hit(true);
             }
         }
