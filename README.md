@@ -4,8 +4,6 @@ A NES emulator in Rust. Written as a learning project, to learn a) Rust and b) h
 
 Build with `cargo build --release` and then run the `nes` binary with a ROM as the first argument, or simply run with `cargo run -- my/nes/rom.nes`.
 
-Controls are hard-coded for now: WASD for movement, L and K for A and B, Enter for Start, and spacebar for Select.
-
 #### Controls
 
 Hard-coded at the moment.
