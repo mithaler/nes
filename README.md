@@ -6,6 +6,19 @@ Build with `cargo build --release` and then run the `nes` binary with a ROM as t
 
 Controls are hard-coded for now: WASD for movement, L and K for A and B, Enter for Start, and spacebar for Select.
 
+#### Controls
+
+Hard-coded at the moment.
+
+Up: W  
+Left: A  
+Down: S  
+Right: D  
+A: L  
+B: K  
+Start: Enter  
+Select: Space  
+
 ### Should I play games on this?
 
 Oh god no. This is a toy project that I wrote for my edification. If you actually want to play games, use something that people actually maintain.
