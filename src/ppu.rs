@@ -1,6 +1,6 @@
 use crate::common::{Clocked, Shared, Addressable};
 use crate::cpu::Cpu;
-use crate::memory::PpuMem;
+use crate::memory::{PpuMem, PpuMask};
 
 pub struct Ppu {
     mem: Shared<PpuMem>,
@@ -158,18 +158,19 @@ impl Ppu {
 
     fn bg_enabled(&self) -> bool {
         let ppumask = self.mem.borrow().get_ppumask();
-        (ppumask & 0b0000_1000) != 0 &&
-            (self.x() > 7 || (ppumask & 0b0000_0010) != 0)
+        ppumask.contains(PpuMask::RENDER_BACKGROUND) &&
+            (self.x() > 7 || ppumask.contains(PpuMask::MASK_LEFT_BACKGROUND))
     }
 
     fn sprites_enabled(&self) -> bool {
         let ppumask = self.mem.borrow().get_ppumask();
-        (ppumask & 0b0001_0000) != 0 &&
-            (self.x() > 7 || (ppumask & 0b0000_0100) != 0)
+        ppumask.contains(PpuMask::RENDER_SPRITES) &&
+            (self.x() > 7 || ppumask.contains(PpuMask::MASK_LEFT_SPRITES))
     }
 
     pub fn rendering_enabled(&self) -> bool {
-        return self.bg_enabled() && self.sprites_enabled();
+        let ppumask = self.mem.borrow().get_ppumask();
+        ppumask.contains(PpuMask::RENDER_BACKGROUND) && ppumask.contains(PpuMask::RENDER_SPRITES)
     }
 
     // TODO optimization: since we're not caching these from scanline to scanline, we only need

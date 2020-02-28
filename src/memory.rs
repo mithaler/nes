@@ -93,6 +93,19 @@ impl PpuCtrl {
     }
 }
 
+bitflags! {
+    pub struct PpuMask: u8 {
+        const EMPHASIZE_BLUE       = 0b1000_0000;
+        const EMPHASIZE_GREEN      = 0b0100_0000;
+        const EMPHASIZE_RED        = 0b0010_0000;
+        const RENDER_SPRITES       = 0b0001_0000;
+        const RENDER_BACKGROUND    = 0b0000_1000;
+        const MASK_LEFT_SPRITES    = 0b0000_0100;
+        const MASK_LEFT_BACKGROUND = 0b0000_0010;
+        const GREYSCALE            = 0b0000_0001;
+    }
+}
+
 // https://wiki.nesdev.com/w/index.php/PPU_memory_map
 pub struct PpuMem {
     pub mapper: Mapper,
@@ -100,7 +113,7 @@ pub struct PpuMem {
     oam: Mem,
 
     ppuctrl: PpuCtrl,
-    ppumask: u8,
+    ppumask: PpuMask,
     pub scroll_x: u8,
     pub scroll_y: u8,
     vblank: bool,
@@ -118,7 +131,7 @@ impl PpuMem {
             oam: initialized_mem(0x100),
 
             ppuctrl: PpuCtrl::from_register(0),
-            ppumask: 0,
+            ppumask: PpuMask::empty(),
             scroll_x: 0,
             scroll_y: 0,
             vblank: false,
@@ -168,10 +181,10 @@ impl PpuMem {
     }
 
     pub fn set_ppumask(&mut self, ppumask: u8) {
-        self.ppumask = ppumask;
+        self.ppumask = PpuMask::from_bits_truncate(ppumask);
     }
 
-    pub fn get_ppumask(&self) -> u8 {
+    pub fn get_ppumask(&self) -> PpuMask {
         self.ppumask
     }
 
@@ -216,7 +229,7 @@ impl Addressable for PpuMem {
             0x0000 ..= 0x3EFF => self.mapper.borrow().get_ppu_space(addr),
             0x3F00 ..= 0x3FFF => {
                 let out = self.palette_ram[PpuMem::palette_ram_address(addr)];
-                if (self.ppumask & 1) != 0 {
+                if self.ppumask.contains(PpuMask::GREYSCALE) {
                     out & 0x30
                 } else {
                     out
