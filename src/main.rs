@@ -150,9 +150,10 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
-        let ppu_cycle_count = match odd_frame {
-            true => 89341,
-            false => 89342
+        let ppu_cycle_count = if odd_frame && context.ppu.rendering_enabled() {
+            89341
+        } else {
+            89342
         };
         render_frame(&mut context, ppu_cycle_count)?;
         odd_frame = !odd_frame;

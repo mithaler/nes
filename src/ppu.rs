@@ -168,6 +168,10 @@ impl Ppu {
             (self.x() > 7 || (ppumask & 0b0000_0100) != 0)
     }
 
+    pub fn rendering_enabled(&self) -> bool {
+        return self.bg_enabled() && self.sprites_enabled();
+    }
+
     // TODO optimization: since we're not caching these from scanline to scanline, we only need
     // one row of these at a time, so we don't have to return and store all 8/16.
     fn pattern(&self, num: u8, base_addr: u16, large: bool, horizontal_flip: bool, vertical_flip: bool) -> Vec<Vec<u8>> {
@@ -488,7 +492,7 @@ impl Ppu {
                     _ => unreachable!()
                 };
                 // if rendering is enabled, skip first tick of first scanline
-                if self.odd_frame && self.bg_enabled() && self.sprites_enabled() && self.scanline == -1 {
+                if self.odd_frame && self.rendering_enabled() && self.scanline == -1 {
                     1
                 } else {
                     0
