@@ -106,8 +106,8 @@ impl Mmc3 {
 
     fn set_bank_register(&mut self, value: u8) {
         match self.bank_selector {
-            r @ 0 ... 1 => self.chr_course_bank_registers[r as usize] = (value & 0b1111_1110) as usize,
-            r @ 2 ... 5 => self.chr_fine_bank_registers[r as usize - 2] = value as usize,
+            r @ 0 ..= 1 => self.chr_course_bank_registers[r as usize] = (value & 0b1111_1110) as usize,
+            r @ 2 ..= 5 => self.chr_fine_bank_registers[r as usize - 2] = value as usize,
             6 => self.prg_r6 = (value & 0b0011_1111) as usize,
             7 => self.prg_r7 = (value & 0b0011_1111) as usize,
             _ => unreachable!()
@@ -142,11 +142,11 @@ impl Mmc3 {
         // https://wiki.nesdev.com/w/index.php/MMC3#CHR_Banks
         let resolved_addr = if self.chr_first_bank_fine {
             match addr {
-                0x0000...0x0FFF => {
+                0x0000..=0x0FFF => {
                     let (bank, position) = div_rem(addr, kb(1));
                     self.chr_fine_bank_registers[bank] * kb(1) + position
                 }
-                0x1000...0x1FFF => {
+                0x1000..=0x1FFF => {
                     let (bank, position) = div_rem(addr - 0x1000, kb(2));
                     self.chr_course_bank_registers[bank] * kb(1) + position
                 },
@@ -154,11 +154,11 @@ impl Mmc3 {
             }
         } else {
             match addr {
-                0x0000...0x0FFF => {
+                0x0000..=0x0FFF => {
                     let (bank, position) = div_rem(addr, kb(2));
                     self.chr_course_bank_registers[bank] * kb(1) + position
                 },
-                0x1000...0x1FFF => {
+                0x1000..=0x1FFF => {
                     let (bank, position) = div_rem(addr - 0x1000, kb(1));
                     self.chr_fine_bank_registers[bank] * kb(1) + position
                 },
@@ -177,60 +177,60 @@ impl Mapping for Mmc3 {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         let resolved = addr as usize;
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => {
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x6000..=0x7FFF => {
                 match self.ram_enabled {
                     true => self.prg_ram[resolved - 0x6000],
                     false => OPEN_BUS_VALUE
                 }
             },
-            0x8000...0x9FFF => self.prg_rom[self.resolve_swappable_prg_bank(resolved, 0x8000)],
-            0xA000...0xBFFF => self.prg_rom[resolved - 0xA000 + (self.prg_r7 * kb(8))],
-            0xC000...0xDFFF => self.prg_rom[self.resolve_swappable_prg_bank(resolved, 0xC000)],
-            0xE000...0xFFFF => self.prg_rom[resolved - 0xE000 + ((self.prg_bank_count - 1) * kb(8))]
+            0x8000..=0x9FFF => self.prg_rom[self.resolve_swappable_prg_bank(resolved, 0x8000)],
+            0xA000..=0xBFFF => self.prg_rom[resolved - 0xA000 + (self.prg_r7 * kb(8))],
+            0xC000..=0xDFFF => self.prg_rom[self.resolve_swappable_prg_bank(resolved, 0xC000)],
+            0xE000..=0xFFFF => self.prg_rom[resolved - 0xE000 + ((self.prg_bank_count - 1) * kb(8))]
         }
     }
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         let resolved = addr as usize;
         match addr {
-            0x6000...0x7FFF =>
+            0x6000..=0x7FFF =>
                 if self.ram_enabled && !self.ram_write_protected {
                     self.prg_ram[resolved - 0x6000] = value
                 },
-            0x8000...0x9FFE if addr & 1 == 0 => self.bank_select(value),
-            0x8001...0x9FFF if addr & 1 == 1 => self.set_bank_register(value),
-            0xA000...0xBFFE if addr & 1 == 0 => self.set_nametable_mirror(value),
-            0xA001...0xBFFF if addr & 1 == 1 => self.set_ram_protect(value),
-            0xC000...0xDFFE if addr & 1 == 0 => self.irq.latch = value,
-            0xC001...0xDFFF if addr & 1 == 1 => self.irq.reload = true,
-            0xE000...0xFFFE if addr & 1 == 0 => {
+            0x8000..=0x9FFE if addr & 1 == 0 => self.bank_select(value),
+            0x8001..=0x9FFF if addr & 1 == 1 => self.set_bank_register(value),
+            0xA000..=0xBFFE if addr & 1 == 0 => self.set_nametable_mirror(value),
+            0xA001..=0xBFFF if addr & 1 == 1 => self.set_ram_protect(value),
+            0xC000..=0xDFFE if addr & 1 == 0 => self.irq.latch = value,
+            0xC001..=0xDFFF if addr & 1 == 1 => self.irq.reload = true,
+            0xE000..=0xFFFE if addr & 1 == 0 => {
                 self.irq.enabled = false;
                 self.irq.counter = self.irq.latch;
                 self.irq.triggered = false;
             },
-            0xE001...0xFFFF if addr & 1 == 1 => self.irq.enabled = true,
+            0xE001..=0xFFFF if addr & 1 == 1 => self.irq.enabled = true,
             _ => unimplemented!("MMC3 write: {:04X?} -> {:02X?}", addr, value)
         }
     }
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x1FFF => self.read_chr_rom(addr as usize),
-            0x2000...0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
-            0x3000...0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
+            0x0000..=0x1FFF => self.read_chr_rom(addr as usize),
+            0x2000..=0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
+            0x3000..=0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
     }
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x2000...0x2FFF => {
+            0x2000..=0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value;
             },
-            0x3000...0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000..=0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!("Bad MMC3 write: {:04X?} -> {:02X?}", addr, value)
         }
     }

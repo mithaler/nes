@@ -52,16 +52,16 @@ impl Gxrom {
 impl Mapping for Gxrom {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
-            0x6000...0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to read it!")[(addr - 0x6000) as usize],
-            0x8000...0xFFFF => self.prg_rom[Gxrom::prg_rom_addr(addr, self.prg_bank)],
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => panic!("Address {:X?} unused by this mapper!", addr),
+            0x6000..=0x7FFF => self.prg_ram.as_ref().expect("ROM without RAM tried to read it!")[(addr - 0x6000) as usize],
+            0x8000..=0xFFFF => self.prg_rom[Gxrom::prg_rom_addr(addr, self.prg_bank)],
         }
     }
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 self.chr_bank = (value & 0b0000_0011) as u16;
                 self.prg_bank = (value >> 4) as u16;
                 debug!("Bankswitch: PRG {:?}, CHR {:?}", self.prg_bank, self.chr_bank);
@@ -72,21 +72,21 @@ impl Mapping for Gxrom {
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[Gxrom::chr_rom_addr(addr, self.chr_bank)],
-            0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
+            0x0 ..= 0x1FFF => self.chr_rom[Gxrom::chr_rom_addr(addr, self.chr_bank)],
+            0x2000 ..= 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
     }
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[Gxrom::chr_rom_addr(addr, self.chr_bank)] = value,
-            0x2000 ... 0x2FFF => {
+            0x0 ..= 0x1FFF => self.chr_rom[Gxrom::chr_rom_addr(addr, self.chr_bank)] = value,
+            0x2000 ..= 0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value
             },
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }
     }

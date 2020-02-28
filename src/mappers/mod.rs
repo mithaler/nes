@@ -14,7 +14,7 @@ pub const fn kb(num: u16) -> usize {
     (num * 0x400) as usize
 }
 
-pub type Mapper = Shared<Mapping>;
+pub type Mapper = Shared<dyn Mapping>;
 
 pub struct HeaderAttributes {
     prg_rom_size: usize,  // in 16kb units
@@ -84,15 +84,15 @@ impl Resolver for NametableMirror {
         usize::from(match self {
             NametableMirror::Horizontal => {
                 match addr {
-                    0x2000 ... 0x23FF | 0x2800 ... 0x2BFF => addr,
-                    0x2400 ... 0x27FF | 0x2C00 ... 0x2FFF => addr & 0b1111_1011_1111_1111,
+                    0x2000 ..= 0x23FF | 0x2800 ..= 0x2BFF => addr,
+                    0x2400 ..= 0x27FF | 0x2C00 ..= 0x2FFF => addr & 0b1111_1011_1111_1111,
                     _ => unreachable!("nametable addr {:0X?}", addr),
                 }
             },
             NametableMirror::Vertical => {
                 match addr {
-                    0x2000 ... 0x23FF | 0x2400 ... 0x27FF => addr,
-                    0x2800 ... 0x2BFF | 0x2C00 ... 0x2FFF => addr & 0b1111_0111_1111_1111,
+                    0x2000 ..= 0x23FF | 0x2400 ..= 0x27FF => addr,
+                    0x2800 ..= 0x2BFF | 0x2C00 ..= 0x2FFF => addr & 0b1111_0111_1111_1111,
                     _ => unreachable!("nametable addr {:0X?}", addr),
                 }
             },

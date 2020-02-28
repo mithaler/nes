@@ -83,11 +83,11 @@ impl Apu {
 
     pub fn set_register(&mut self, addr: u16, value: u8) {
         match addr {
-            0x4000 ... 0x4003 => self.pulse1.set_register(addr, value),
-            0x4004 ... 0x4007 => self.pulse2.set_register(addr, value),
-            0x4008 ... 0x400B => self.triangle.set_register(addr, value),
-            0x400C ... 0x400F => self.noise.set_register(addr, value),
-            0x4010 ... 0x4013 => self.dmc.set_register(addr, value),
+            0x4000 ..= 0x4003 => self.pulse1.set_register(addr, value),
+            0x4004 ..= 0x4007 => self.pulse2.set_register(addr, value),
+            0x4008 ..= 0x400B => self.triangle.set_register(addr, value),
+            0x400C ..= 0x400F => self.noise.set_register(addr, value),
+            0x4010 ..= 0x4013 => self.dmc.set_register(addr, value),
             0x4015 => self.set_enabled_flags(value),
             0x4017 => self.frame_counter = FrameCounter::from_bits_truncate(value),
             _ => warn!("Unimplemented APU register: {:04X} -> {:02X}", addr, value)
@@ -96,7 +96,7 @@ impl Apu {
 
     pub fn get_register(&mut self, addr: u16) -> u8 {
         match addr {
-            0x4000 ... 0x4014 => panic!("Bad APU register read: {:04X?}", addr),
+            0x4000 ..= 0x4014 => panic!("Bad APU register read: {:04X?}", addr),
             0x4015 => {
                 let mut out = 0u8;
                 if self.dmc.irq {

@@ -69,11 +69,11 @@ impl Nrom {
 impl Mapping for Nrom {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => 0,  // open bus I guess?
-            0x6000...0x7FFF => self.prg_ram.as_ref().map(|ram| ram[(addr - 0x6000) as usize]).unwrap_or(0),
-            0x8000...0xBFFF => self.prg_rom[(addr - 0x8000) as usize],
-            0xC000...0xFFFF => match self.rom_size {
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => 0,  // open bus I guess?
+            0x6000..=0x7FFF => self.prg_ram.as_ref().map(|ram| ram[(addr - 0x6000) as usize]).unwrap_or(0),
+            0x8000..=0xBFFF => self.prg_rom[(addr - 0x8000) as usize],
+            0xC000..=0xFFFF => match self.rom_size {
                 RomSize::Sixteen => self.prg_rom[(addr - 0xC000) as usize],
                 RomSize::ThirtyTwo => self.prg_rom[(addr - 0x8000) as usize],
             },
@@ -82,28 +82,28 @@ impl Mapping for Nrom {
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
+            0x6000..=0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
             _ => panic!("Tried to write to CPU address space outside RAM! (addr {:04X?})", addr),
         }
     }
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[addr as usize],
-            0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
+            0x0 ..= 0x1FFF => self.chr_rom[addr as usize],
+            0x2000 ..= 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
     }
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[addr as usize] = value, // sometimes RAM, sometimes ROM
-            0x2000 ... 0x2FFF => {
+            0x0 ..= 0x1FFF => self.chr_rom[addr as usize] = value, // sometimes RAM, sometimes ROM
+            0x2000 ..= 0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value
             },
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }
     }

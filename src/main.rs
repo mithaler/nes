@@ -55,7 +55,7 @@ struct Context<'a> {
     event_pump: EventPump
 }
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("nes")
         .version("0.1")
         .author("Michael Louis Thaler <michael.louis.thaler@gmail.com>")
@@ -132,7 +132,7 @@ fn main() -> Result<(), Box<Error>> {
     frame_loop(&mut context)
 }
 
-fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
+fn frame_loop(mut context: &mut Context) -> Result<(), Box<dyn Error>> {
     let mut odd_frame = false;
     let mut running = true;
     let mut turbo = false;
@@ -167,7 +167,7 @@ fn frame_loop(mut context: &mut Context) -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<Error>> {
+fn render_frame(context: &mut Context, ppu_cycles: u32) -> Result<(), Box<dyn Error>> {
     for i in 0..ppu_cycles {
         if (i % 3) == 0 {
             context.cpu.borrow_mut().tick();

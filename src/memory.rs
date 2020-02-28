@@ -33,8 +33,8 @@ impl CpuMem {
     pub fn get_page(&self, start_addr: u16) -> &[u8] {
         let addr = start_addr as usize;
         match start_addr {
-            0 ... 0x1F00 => &self.ram[addr..addr+256],
-            //0x4020 ... 0xFFFF => self.mapper.borrow().get_cpu_page(start_addr),
+            0 ..= 0x1F00 => &self.ram[addr..addr+256],
+            //0x4020 ..= 0xFFFF => self.mapper.borrow().get_cpu_page(start_addr),
             _ => panic!("Weird start address for page read: {:04X?}", addr)
         }
     }
@@ -43,22 +43,22 @@ impl CpuMem {
 impl Addressable for CpuMem {
     fn get(&self, addr: u16) -> u8 {
         match addr {
-            0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize],
-            0x2000 ... 0x3FFF => self.bus.borrow_mut().get(((addr - 0x2000) & 0x7) + 0x2000),
-            0x4000 ... 0x4017 => self.bus.borrow_mut().get(addr),
-            // 0x4018 ... 0x401F used only for internal testing
-            0x4020 ... 0xFFFF => self.mapper.borrow().get_cpu_space(addr),
+            0 ..= 0x1FFF => self.ram[(addr & 0x7FF) as usize],
+            0x2000 ..= 0x3FFF => self.bus.borrow_mut().get(((addr - 0x2000) & 0x7) + 0x2000),
+            0x4000 ..= 0x4017 => self.bus.borrow_mut().get(addr),
+            // 0x4018 ..= 0x401F used only for internal testing
+            0x4020 ..= 0xFFFF => self.mapper.borrow().get_cpu_space(addr),
             _ => panic!()
         }
     }
 
     fn set(&mut self, addr: u16, value: u8) {
         match addr {
-            0 ... 0x1FFF => self.ram[(addr & 0x7FF) as usize] = value,
-            0x2000 ... 0x3FFF => self.bus.borrow_mut().set(((addr - 0x2000) & 0x7) + 0x2000, value),
-            0x4000 ... 0x4017 => self.bus.borrow_mut().set(addr, value),
-            // 0x4018 ... 0x401F used only for internal testing
-            0x4020 ... 0xFFFF => self.mapper.borrow_mut().set_cpu_space(addr, value),
+            0 ..= 0x1FFF => self.ram[(addr & 0x7FF) as usize] = value,
+            0x2000 ..= 0x3FFF => self.bus.borrow_mut().set(((addr - 0x2000) & 0x7) + 0x2000, value),
+            0x4000 ..= 0x4017 => self.bus.borrow_mut().set(addr, value),
+            // 0x4018 ..= 0x401F used only for internal testing
+            0x4020 ..= 0xFFFF => self.mapper.borrow_mut().set_cpu_space(addr, value),
             _ => panic!()
         }
     }
@@ -213,8 +213,8 @@ impl PpuMem {
 impl Addressable for PpuMem {
     fn get(&self, addr: u16) -> u8 {
         match addr {
-            0x0000 ... 0x3EFF => self.mapper.borrow().get_ppu_space(addr),
-            0x3F00 ... 0x3FFF => {
+            0x0000 ..= 0x3EFF => self.mapper.borrow().get_ppu_space(addr),
+            0x3F00 ..= 0x3FFF => {
                 let out = self.palette_ram[PpuMem::palette_ram_address(addr)];
                 if (self.ppumask & 1) != 0 {
                     out & 0x30
@@ -228,8 +228,8 @@ impl Addressable for PpuMem {
 
     fn set(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0000 ... 0x3EFF => self.mapper.borrow_mut().set_ppu_space(addr, value),
-            0x3F00 ... 0x3FFF => self.palette_ram[PpuMem::palette_ram_address(addr)] = value,
+            0x0000 ..= 0x3EFF => self.mapper.borrow_mut().set_ppu_space(addr, value),
+            0x3F00 ..= 0x3FFF => self.palette_ram[PpuMem::palette_ram_address(addr)] = value,
             _ => panic!()
         }
     }

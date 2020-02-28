@@ -20,7 +20,7 @@ pub trait Addressable {
     fn get(&self, addr: u16) -> u8;
     fn set(&mut self, addr: u16, value: u8);
 
-    fn update(&mut self, addr: u16, func: &Fn (u8) -> u8) -> u8 {
+    fn update(&mut self, addr: u16, func: &dyn Fn(u8) -> u8) -> u8 {
         let curr = self.get(addr);
         let new = func(curr);
         self.set(addr, new);

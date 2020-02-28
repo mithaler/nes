@@ -388,7 +388,7 @@ impl Ppu {
         }
     }
 
-    fn render_background_pixel(&mut self) -> (ColorRef) {
+    fn render_background_pixel(&mut self) -> ColorRef {
         self.update_tile();
         let tile = self.tile.as_ref().unwrap();
         let y = ((self.y() + (self.scroll_y as i16 & 0b0000_0111)) % 8) as usize;
@@ -414,7 +414,7 @@ impl Ppu {
         None
     }
 
-    fn reconcile_pixel(&self, bg: Option<(ColorRef)>, sprite: Option<(ColorRef, u8, &Sprite)>) -> ColorRef {
+    fn reconcile_pixel(&self, bg: Option<ColorRef>, sprite: Option<(ColorRef, u8, &Sprite)>) -> ColorRef {
         match sprite {
             None => bg,
             Some((color, _, sp)) => {
@@ -426,7 +426,7 @@ impl Ppu {
         }.unwrap_or_else(|| color(self.mem.borrow().get(0x3F00)))
     }
 
-    fn check_sprite0hit(&self, bg: Option<(ColorRef)>, sprite: Option<(ColorRef, u8, &Sprite)>) {
+    fn check_sprite0hit(&self, bg: Option<ColorRef>, sprite: Option<(ColorRef, u8, &Sprite)>) {
         if let (Some(_), Some((_, sp, sprite))) = (bg, sprite) {
             if self.x() < 255 && sprite.index == 0 && sp != 0 {
                 self.mem.borrow_mut().set_sprite0hit(true);
@@ -439,7 +439,7 @@ impl Ppu {
             self.update_scroll_position();
         }
 
-        let mut bg_color: Option<(ColorRef)> = None;
+        let mut bg_color: Option<ColorRef> = None;
         let mut sprite: Option<(ColorRef, u8, &Sprite)> = None;
         if self.tick == 0 {
             let (sprites, overflow) = self.scanline_sprites();
@@ -469,16 +469,16 @@ impl Ppu {
     fn render(&mut self) {
         match self.scanline {
             -1 => self.dummy_scanline(),
-            0 ... 239 => self.visible_scanline(),
+            0 ..= 239 => self.visible_scanline(),
             240 => {},  // post-render
-            241 ... 260 => self.vblank_scanline(),
+            241 ..= 260 => self.vblank_scanline(),
             _ => unreachable!()
         }
         self.tick = match self.tick {
-            t @ 0 ... 339 => t + 1,
+            t @ 0 ..= 339 => t + 1,
             340 => {
                 self.scanline = match self.scanline {
-                    s @ -1 ... 259 => s + 1,
+                    s @ -1 ..= 259 => s + 1,
                     260 => -1,
                     _ => unreachable!()
                 };

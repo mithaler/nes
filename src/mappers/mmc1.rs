@@ -50,8 +50,8 @@ impl ChrBankMode {
             ChrBankMode::Whole => resolved + ((bank0 & 0b1111_1110) * kb(8)),
             ChrBankMode::Separate => {
                 match addr {
-                    0x0 ... 0x0FFF => resolved + (bank0 * kb(4)),
-                    0x1000 ... 0x1FFF => resolved - 0x1000 + (bank1 * kb(4)),
+                    0x0 ..= 0x0FFF => resolved + (bank0 * kb(4)),
+                    0x1000 ..= 0x1FFF => resolved - 0x1000 + (bank1 * kb(4)),
                     _ => unreachable!()
                 }
             }
@@ -152,10 +152,10 @@ impl Mmc1 {
     fn modeswitch(&mut self, addr: u16, value: u8) {
         let val = value as usize;
         match addr {
-            0x8000 ... 0x9FFF => self.control_register(value),
-            0xA000 ... 0xBFFF => self.chr_bank_0(val),
-            0xC000 ... 0xDFFF => self.chr_bank_1(val),
-            0xE000 ... 0xFFFF => self.prg_bank(val),
+            0x8000 ..= 0x9FFF => self.control_register(value),
+            0xA000 ..= 0xBFFF => self.chr_bank_0(val),
+            0xC000 ..= 0xDFFF => self.chr_bank_1(val),
+            0xE000 ..= 0xFFFF => self.prg_bank(val),
             _ => unimplemented!("MMC1 modeswitch addr {:04X} -> {:#010b}", addr, value),
         }
     }
@@ -178,39 +178,39 @@ impl Mmc1 {
 impl Mapping for Mmc1 {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => OPEN_BUS_VALUE,
-            0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
-            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => OPEN_BUS_VALUE,
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
+            0x8000..=0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
     }
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => {},
-            0x6000...0x7FFF => self.prg_ram[(addr - 0x6000) as usize] = value,
-            0x8000...0xFFFF => self.write_shift_register(addr, value)
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => {},
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize] = value,
+            0x8000..=0xFFFF => self.write_shift_register(addr, value)
         }
     }
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)],
-            0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
+            0x0 ..= 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)],
+            0x2000 ..= 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
     }
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)] = value,
-            0x2000 ... 0x2FFF => {
+            0x0 ..= 0x1FFF => self.chr_rom[self.chr_bank_mode.resolve_addr(self.selected_chr_bank_0, self.selected_chr_bank_1, addr)] = value,
+            0x2000 ..= 0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value;
             },
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }
     }
@@ -266,39 +266,39 @@ impl Uxrom {
 impl Mapping for Uxrom {
     fn get_cpu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => OPEN_BUS_VALUE,
-            0x6000...0x7FFF => self.prg_ram.as_ref().map_or(0, |ram| ram[(addr - 0x6000) as usize]),
-            0x8000...0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => OPEN_BUS_VALUE,
+            0x6000..=0x7FFF => self.prg_ram.as_ref().map_or(0, |ram| ram[(addr - 0x6000) as usize]),
+            0x8000..=0xFFFF => self.prg_rom[self.prg_bank_mode.resolve_addr(self.selected_prg_bank, addr)]
         }
     }
 
     fn set_cpu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0000...0x401F => panic!("Address {:X?} not handled by mappers!", addr),
-            0x4020...0x5FFF => {},
-            0x6000...0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
-            0x8000...0xFFFF => self.set_bank_mode(value)
+            0x0000..=0x401F => panic!("Address {:X?} not handled by mappers!", addr),
+            0x4020..=0x5FFF => {},
+            0x6000..=0x7FFF => self.prg_ram.as_mut().expect("ROM without RAM tried to write it!")[(addr - 0x6000) as usize] = value,
+            0x8000..=0xFFFF => self.set_bank_mode(value)
         }
     }
 
     fn get_ppu_space(&self, addr: u16) -> u8 {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[addr as usize],
-            0x2000 ... 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
+            0x0 ..= 0x1FFF => self.chr_rom[addr as usize],
+            0x2000 ..= 0x2FFF => self.internal_vram[self.mirrored_addr(addr)],
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize],
             _ => unimplemented!()
         }
     }
 
     fn set_ppu_space(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0 ... 0x1FFF => self.chr_rom[addr as usize] = value,
-            0x2000 ... 0x2FFF => {
+            0x0 ..= 0x1FFF => self.chr_rom[addr as usize] = value,
+            0x2000 ..= 0x2FFF => {
                 let addr = self.mirrored_addr(addr);
                 self.internal_vram[addr] = value;
             },
-            0x3000 ... 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
+            0x3000 ..= 0x3EFF => self.internal_vram[(addr - 0x3000) as usize] = value,
             _ => unimplemented!()
         }
     }
