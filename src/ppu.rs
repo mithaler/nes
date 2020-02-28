@@ -12,6 +12,7 @@ pub struct Ppu {
     framebuffer: [u8; (256 * 240 * 3)],
     scanline: i16,  // -1 - 261
     tick: u16,  // 0 - 340
+    odd_frame: bool,
 
     // Unlike the corresponding fields in PpuMem, these take into account the nametable (hence u16)
     scroll_x: u16,
@@ -135,6 +136,7 @@ impl Ppu {
             framebuffer: [0; (256 * 240 * 3)],  // 3 bytes per pixel
             scanline: -1,
             tick: 0,
+            odd_frame: false,
             scroll_x: 0,
             scroll_y: 0,
         }
@@ -479,10 +481,18 @@ impl Ppu {
             340 => {
                 self.scanline = match self.scanline {
                     s @ -1 ..= 259 => s + 1,
-                    260 => -1,
+                    260 => {
+                        self.odd_frame = !self.odd_frame;
+                        -1
+                    },
                     _ => unreachable!()
                 };
-                0
+                // if rendering is enabled, skip first tick of first scanline
+                if self.odd_frame && self.bg_enabled() && self.sprites_enabled() && self.scanline == -1 {
+                    1
+                } else {
+                    0
+                }
             },
             _ => unreachable!()
         }
