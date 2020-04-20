@@ -423,35 +423,47 @@ impl Cpu {
         out
     }
 
-    fn absolute_addr(&self) -> u16 {
-        join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1))
-    }
-
     fn next_byte(&self) -> u8 {
         self.mem.get(self.pc + 1)
     }
 
     /// Returns whether the addresses are on different 256-byte pages.
-    fn _different_pages(addr1: u16, addr2: u16) -> bool {
+    fn _different_pages(&self, addr1: u16, addr2: u16) -> bool {
         (addr1 & 0xFF00) != (addr2 & 0xFF00)
+    }
+
+    fn absolute_lookup(&self, jump: Option<u8>) -> (u16, bool) {
+        let origin = join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1));
+        match jump {
+            Some(value) => {
+                let dest = origin.wrapping_add(value as u16);
+                (dest, self._different_pages(origin, dest))
+            }
+            None => (origin, false),
+        }
     }
 
     /// Returns the address in memory that the opcode points to, based on the current
     /// position of `PC` and the opcode's address mode. Panics if the opcode's address mode is
     /// `ACCUMULATOR` or `IMPLICIT`, because in both cases the handler needs to do something
-    /// other than resolve an address in memory.
-    fn resolve_addr(&self, op: &Opcode) -> u16 {
+    /// other than resolve an address in memory. Also returns a bool that is true if a page was
+    /// crossed (for the purpose of deciding whether there's a page crossing penalty).
+    fn resolve_addr(&self, op: &Opcode) -> (u16, bool) {
         match op.1 {
-            Accumulator => 0,
-            Implicit => 0,
-            Immediate => self.pc + 1,
-            Absolute => self.absolute_addr(),
-            AbsoluteX => self.absolute_addr().wrapping_add(self.x as u16),
-            AbsoluteY => self.absolute_addr().wrapping_add(self.y as u16),
-            ZeroPage => join_bytes(0x0, self.next_byte()),
-            ZeroPageX => join_bytes(0x0, self.next_byte().wrapping_add(self.x)),
-            ZeroPageY => join_bytes(0x0, self.next_byte().wrapping_add(self.y)),
-            Relative => self.pc.wrapping_add((self.next_byte() as i8) as u16),
+            Accumulator => (0, false),
+            Implicit => (0, false),
+            Immediate => (self.pc + 1, false),
+            Absolute => self.absolute_lookup(None),
+            AbsoluteX => self.absolute_lookup(Some(self.x)),
+            AbsoluteY => self.absolute_lookup(Some(self.y)),
+            ZeroPage => (join_bytes(0x0, self.next_byte()), false),
+            ZeroPageX => (join_bytes(0x0, self.next_byte().wrapping_add(self.x)), false),
+            ZeroPageY => (join_bytes(0x0, self.next_byte().wrapping_add(self.y)), false),
+            Relative => {
+                let origin = self.pc;
+                let dest = origin.wrapping_add((self.next_byte() as i8) as u16);
+                (dest, self._different_pages(origin, dest))
+            }
             Indirect => {
                 let addr = join_bytes(self.mem.get(self.pc + 2), self.mem.get(self.pc + 1));
                 let high_byte_addr = match (addr & 0x00FF) == 0x00FF {
@@ -459,19 +471,21 @@ impl Cpu {
                     true => addr & 0xFF00,
                     false => addr + 1
                 };
-                join_bytes(self.mem.get(high_byte_addr), self.mem.get(addr))
+                (join_bytes(self.mem.get(high_byte_addr), self.mem.get(addr)), false)
             }
             IndirectX => {
                 let arg = self.next_byte().wrapping_add(self.x);
                 let low = self.mem.get(join_bytes(0x0, arg));
                 let high = self.mem.get(join_bytes(0x0, arg.wrapping_add(1)));
-                join_bytes(high, low)
+                (join_bytes(high, low), false)
             },
             IndirectY => {
                 let arg = self.next_byte();
                 let low = self.mem.get(join_bytes(0x0, arg));
                 let high = self.mem.get(join_bytes(0x0, arg.wrapping_add(1)));
-                join_bytes(high, low).wrapping_add(self.y as u16)
+                let origin = join_bytes(high, low);
+                let dest = origin.wrapping_add(self.y as u16);
+                (dest, self._different_pages(origin, dest))
             }
         }
     }
@@ -513,35 +527,43 @@ impl Cpu {
         self.interrupt(0b0011_0000, RESET_VECTOR)
     }
 
+    fn page_crossed_penalty(&self, pause: u16, op: &Opcode, page_crossed: bool) -> u16 {
+        if op.3 && page_crossed {
+            pause + 1
+        } else {
+            pause
+        }
+    }
+
     /// Sets the remaining cycle pauses appropriately, and returns the number of bytes
     /// the program counter should advance. The cycle pause count should be _one lower than
     /// the documentation says_, because we're using up the first cycle executing the
     /// instruction in the first place.
-    fn set_pause_and_return_shift(&mut self, pause: u16, op: &Opcode) -> u16 {
-        self.remaining_pause = pause;
+    fn set_pause_and_return_shift(&mut self, pause: u16, op: &Opcode, page_crossed: bool) -> u16 {
+        self.remaining_pause = self.page_crossed_penalty(pause, op, page_crossed);
         op.1.byte_count()
     }
 
-    fn _group_1_pause_and_shift(&mut self, op: &Opcode) -> u16 {
+    fn _group_1_pause_and_shift(&mut self, op: &Opcode, page_crossed: bool) -> u16 {
         // ZeroPageY isn't actually part of these, but LDX allows it and is otherwise identical
         match op.1 {
-            Immediate => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op),
-            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(3, op),  // TODO page crossing???
-            IndirectX => self.set_pause_and_return_shift(5, op),
-            IndirectY => self.set_pause_and_return_shift(4, op),  // TODO page crossing???
+            Immediate => self.set_pause_and_return_shift(1, op, page_crossed),
+            ZeroPage => self.set_pause_and_return_shift(2, op, page_crossed),
+            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op, page_crossed),
+            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(3, op, page_crossed),
+            IndirectX => self.set_pause_and_return_shift(5, op, page_crossed),
+            IndirectY => self.set_pause_and_return_shift(4, op, page_crossed),
             _ => unreachable!()
         }
     }
 
-    fn _illegal_opcodes_pause_and_shift(&mut self, op: &Opcode) -> u16 {
+    fn _illegal_opcodes_pause_and_shift(&mut self, op: &Opcode, page_crossed: bool) -> u16 {
         match op.1 {
-            Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(6, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX => self.set_pause_and_return_shift(5, op),
-            IndirectX | IndirectY => self.set_pause_and_return_shift(7, op),
+            Absolute => self.set_pause_and_return_shift(5, op, page_crossed),
+            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(6, op, page_crossed),
+            ZeroPage => self.set_pause_and_return_shift(4, op, page_crossed),
+            ZeroPageX => self.set_pause_and_return_shift(5, op, page_crossed),
+            IndirectX | IndirectY => self.set_pause_and_return_shift(7, op, page_crossed),
             _ => unreachable!()
         }
     }
@@ -703,11 +725,13 @@ impl Cpu {
 
     fn illegal_op(&mut self, op: &Opcode, func: fn(&mut Cpu, &Opcode) -> ()) -> u16 {
         func(self, op);
-        self._illegal_opcodes_pause_and_shift(op)
+        self.remaining_pause = 0;  // zero out pause from earlier functions
+        // TODO handle illegal pause??
+        self._illegal_opcodes_pause_and_shift(op, false)
     }
 
     fn adc(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
+        let (addr, page_crossed) = self.resolve_addr(op);
         let value = self.mem.get(addr);
         let signed_sum = (value as i8 as i16) + (self.a as i8 as i16) + (self.carry() as i16);
         let (first_add, overflowing1) = self.a.overflowing_add(value);
@@ -716,14 +740,14 @@ impl Cpu {
         self.set_carry(overflowing1 || overflowing2);
         self.set_value_flags(self.a);
         self.set_overflow(signed_sum < -128 || signed_sum > 127);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn and(&mut self, op: &Opcode) -> u16 {
-        let operand = self.mem.get(self.resolve_addr(op));
+        let operand = self.mem.get(self.resolve_addr(op).0);
         self.a &= operand;
         self.set_value_flags(self.a);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, false)
     }
 
     fn asl(&mut self, op: &Opcode) -> u16 {
@@ -733,7 +757,7 @@ impl Cpu {
             self.set_carry(bit_7 as bool);
             self.set_value_flags(self.a);
         } else {
-            let addr = self.resolve_addr(op);
+            let (addr, _) = self.resolve_addr(op);
             let mut value = self.mem.get(addr);
             let bit_7 = (value & 0b1000_0000) != 0;
             value <<= 1;
@@ -742,10 +766,10 @@ impl Cpu {
             self.mem_write(addr, value);
         }
         match op.1 {
-            Accumulator => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX => self.set_pause_and_return_shift(6, op),
+            Accumulator => self.set_pause_and_return_shift(1, op, false),
+            ZeroPage => self.set_pause_and_return_shift(4, op, false),
+            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op, false),
+            AbsoluteX => self.set_pause_and_return_shift(6, op, false),
 
             // used by SLO, overridden by it
             AbsoluteY | IndirectX | IndirectY => 0,
@@ -754,13 +778,14 @@ impl Cpu {
     }
 
     fn bit(&mut self, op: &Opcode) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         self.set_negative((value & SIGN_BIT) != 0);
         self.set_overflow((value & 0b0100_0000) != 0);
         self.set_zero((value & self.a) == 0);
         match op.1 {
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            Absolute => self.set_pause_and_return_shift(3, op),
+            ZeroPage => self.set_pause_and_return_shift(2, op, page_crossed),
+            Absolute => self.set_pause_and_return_shift(3, op, page_crossed),
             _ => unreachable!()
         }
     }
@@ -768,9 +793,9 @@ impl Cpu {
     fn branch_op(&mut self, op: &Opcode, branch: bool) -> u16 {
         self.remaining_pause = 2;
         if branch {
-            self.pc = self.resolve_addr(op);
-            self.remaining_pause += 1;
-            // TODO +2 if page crossed???
+            let (addr, page_crossed) = self.resolve_addr(op);
+            self.pc = addr;
+            self.remaining_pause += if page_crossed { 3 } else { 1 };
         }
         2 // account for the 2 bytes this instruction used
     }
@@ -786,16 +811,17 @@ impl Cpu {
     }
 
     fn compare_op(&mut self, op: &Opcode, to: u8) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         self.set_carry(to >= value);
         self.set_zero(to == value);
         let result = to.wrapping_sub(value);
         self.set_negative(result >= 128);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn dec(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
+        let (addr, _) = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, true);
         self.mem_write(addr, new_val);
         shift
@@ -814,25 +840,26 @@ impl Cpu {
     }
 
     fn eor(&mut self, op: &Opcode) -> u16 {
-        self.a ^= self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        self.a ^= self.mem.get(addr);
         self.set_value_flags(self.a);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn increment(&mut self, mut val: u8, op: &Opcode, decrement: bool) -> (u8, u16) {
         if decrement { val = val.wrapping_sub(1); } else { val = val.wrapping_add(1); }
         self.set_value_flags(val);
         (val, match op.1 {
-            Implicit => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX => self.set_pause_and_return_shift(6, op),
+            Implicit => self.set_pause_and_return_shift(1, op, false),
+            ZeroPage => self.set_pause_and_return_shift(4, op, false),
+            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op, false),
+            AbsoluteX => self.set_pause_and_return_shift(6, op, false),
             _ => 0 // reachable only via illegal opcodes, which overwrite this anyway
         })
     }
 
     fn inc(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
+        let (addr, _) = self.resolve_addr(op);
         let (new_val, shift) = self.increment(self.mem.get(addr), op, false);
         self.mem_write(addr, new_val);
         shift
@@ -851,7 +878,8 @@ impl Cpu {
     }
 
     fn jmp(&mut self, op: &Opcode) -> u16 {
-        self.pc = self.resolve_addr(op);
+        let (addr, _) = self.resolve_addr(op);
+        self.pc = addr;
         match op.1 {
             Absolute => self.remaining_pause = 2,
             Indirect => self.remaining_pause = 4,
@@ -861,7 +889,7 @@ impl Cpu {
     }
 
     fn jsr(&mut self, op: &Opcode) -> u16 {
-        let addr = self.resolve_addr(op);
+        let (addr, _) = self.resolve_addr(op);
         let bytes = (self.pc + 2).to_be_bytes();
         self.stack_push(bytes[0]);
         self.stack_push(bytes[1]);
@@ -874,12 +902,14 @@ impl Cpu {
         self.lda(op);
         self.transfer_op(|cpu| { cpu.x = cpu.a; (cpu.x, true) });
         self.set_value_flags(self.x);
+
+        // cycle crossing penalty handled by lda, which has the same cycle characteristics!
         match op.1 {
-            IndirectX => self.set_pause_and_return_shift(5, op),
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op),
-            IndirectY => self.set_pause_and_return_shift(3, op),
-            AbsoluteY => self.set_pause_and_return_shift(3, op),
+            IndirectX => self.set_pause_and_return_shift(0, op, false),
+            ZeroPage => self.set_pause_and_return_shift(0, op, false),
+            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op, false),
+            IndirectY => self.set_pause_and_return_shift(0, op, false),
+            AbsoluteY => self.set_pause_and_return_shift(0, op, false),
             _ => unreachable!()
         }
     }
@@ -887,24 +917,27 @@ impl Cpu {
     // TODO these only differ by register; is there some way to make them one func?
 
     fn lda(&mut self, op: &Opcode) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         self.a = value;
         self.set_value_flags(value);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn ldx(&mut self, op: &Opcode) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         self.x = value;
         self.set_value_flags(value);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn ldy(&mut self, op: &Opcode) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         self.y = value;
         self.set_value_flags(value);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn lsr(&mut self, op: &Opcode) -> u16 {
@@ -914,7 +947,7 @@ impl Cpu {
             self.set_carry(bit_1 as bool);
             self.set_value_flags(self.a);
         } else {
-            let addr = self.resolve_addr(op);
+            let (addr, _) = self.resolve_addr(op);
             let mut value = self.mem.get(addr);
             let bit_1 = (value & 0b1) != 0;
             value >>= 1;
@@ -923,10 +956,10 @@ impl Cpu {
             self.mem_write(addr, value);
         }
         match op.1 {
-            Accumulator => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX => self.set_pause_and_return_shift(6, op),
+            Accumulator => self.set_pause_and_return_shift(1, op, false),
+            ZeroPage => self.set_pause_and_return_shift(4, op, false),
+            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op, false),
+            AbsoluteX => self.set_pause_and_return_shift(6, op, false),
 
             // used by SRE and overridden by it
             AbsoluteY | IndirectX | IndirectY => 0,
@@ -936,13 +969,14 @@ impl Cpu {
 
     fn nop(&mut self, op: &Opcode) -> u16 {
         self.remaining_pause = 2;
-        op.1.byte_count()
+        op.1.byte_count() // TODO this technically does a read and can take more cycles based on that!
     }
 
     fn ora(&mut self, op: &Opcode) -> u16 {
-        self.a |= self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        self.a |= self.mem.get(addr);
         self.set_value_flags(self.a);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn php(&mut self, _op: &Opcode) -> u16 {
@@ -985,15 +1019,15 @@ impl Cpu {
         if op.1 == Accumulator {
             self.a = self.rol_internal(self.a);
         } else {
-            let addr = self.resolve_addr(op);
+            let (addr, _) = self.resolve_addr(op);
             let new_val = self.rol_internal(self.mem.get(addr));
             self.mem_write(addr, new_val);
         }
         match op.1 {
-            Accumulator => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX => self.set_pause_and_return_shift(6, op),
+            Accumulator => self.set_pause_and_return_shift(1, op, false),
+            ZeroPage => self.set_pause_and_return_shift(4, op, false),
+            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op, false),
+            AbsoluteX => self.set_pause_and_return_shift(6, op, false),
 
             // used by RLA, overridden by it
             AbsoluteY | IndirectX | IndirectY => 0,
@@ -1016,15 +1050,15 @@ impl Cpu {
         if op.1 == Accumulator {
             self.a = self.ror_internal(self.a);
         } else {
-            let addr = self.resolve_addr(op);
+            let (addr, _) = self.resolve_addr(op);
             let new_val = self.ror_internal(self.mem.get(addr));
             self.mem_write(addr, new_val);
         }
         match op.1 {
-            Accumulator => self.set_pause_and_return_shift(1, op),
-            ZeroPage => self.set_pause_and_return_shift(4, op),
-            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op),
-            AbsoluteX => self.set_pause_and_return_shift(6, op),
+            Accumulator => self.set_pause_and_return_shift(1, op, false),
+            ZeroPage => self.set_pause_and_return_shift(4, op, false),
+            ZeroPageX | Absolute => self.set_pause_and_return_shift(5, op, false),
+            AbsoluteX => self.set_pause_and_return_shift(6, op, false),
 
             // used by RRA, overridden by it
             AbsoluteY | IndirectX | IndirectY => 0,
@@ -1048,17 +1082,18 @@ impl Cpu {
     }
 
     fn sax(&mut self, op: &Opcode) -> u16 {
-        self.mem_write(self.resolve_addr(op), self.a & self.x);
+        self.mem_write(self.resolve_addr(op).0, self.a & self.x);
         match op.1 {
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op),
-            IndirectX => self.set_pause_and_return_shift(5, op),
+            ZeroPage => self.set_pause_and_return_shift(2, op, false),
+            Absolute | ZeroPageY => self.set_pause_and_return_shift(3, op, false),
+            IndirectX => self.set_pause_and_return_shift(5, op, false),
             _ => unreachable!()
         }
     }
 
     fn sbc(&mut self, op: &Opcode) -> u16 {
-        let value = self.mem.get(self.resolve_addr(op));
+        let (addr, page_crossed) = self.resolve_addr(op);
+        let value = self.mem.get(addr);
         let signed_sum = (value as i8 as i16) - (self.a as i8 as i16) - (1 - (self.carry() as i16));
         let (first_sub, overflowing1) = self.a.overflowing_sub(value);
         let (second_sub, overflowing2) = first_sub.overflowing_sub(1 - (self.carry() as u8));
@@ -1066,16 +1101,16 @@ impl Cpu {
         self.set_carry(!(overflowing1 || overflowing2));
         self.set_value_flags(self.a);
         self.set_overflow(signed_sum < -128 || signed_sum > 127);
-        self._group_1_pause_and_shift(op)
+        self._group_1_pause_and_shift(op, page_crossed)
     }
 
     fn store(&mut self, op: &Opcode, value: u8) -> u16 {
-        self.mem_write(self.resolve_addr(op), value);
+        self.mem_write(self.resolve_addr(op).0, value);
         match op.1 {
-            ZeroPage => self.set_pause_and_return_shift(2, op),
-            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op),
-            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(4, op),
-            IndirectX | IndirectY => self.set_pause_and_return_shift(5, op),
+            ZeroPage => self.set_pause_and_return_shift(2, op, false),
+            ZeroPageX | ZeroPageY | Absolute => self.set_pause_and_return_shift(3, op, false),
+            AbsoluteX | AbsoluteY => self.set_pause_and_return_shift(4, op, false),
+            IndirectX | IndirectY => self.set_pause_and_return_shift(5, op, false),
             _ => unreachable!()
         }
     }
